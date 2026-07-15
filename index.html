@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="Gorilla Log – privater Trainings-Tracker fürs Fitnessstudio. Alle Daten bleiben lokal auf dem Gerät.">
+  <title>Gorilla Log</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header id="topbar">
+    <h1>🦍 Gorilla Log</h1>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <nav id="tabs" aria-label="Hauptnavigation">
+    <button type="button" data-route="" aria-label="Training">
+      <span class="tab-icon">🏋️</span><span class="tab-text">Training</span>
+    </button>
+    <button type="button" data-route="verlauf" aria-label="Verlauf">
+      <span class="tab-icon">📅</span><span class="tab-text">Verlauf</span>
+    </button>
+    <button type="button" data-route="geraete" aria-label="Geräte">
+      <span class="tab-icon">🛠️</span><span class="tab-text">Geräte</span>
+    </button>
+    <button type="button" data-route="daten" aria-label="Daten">
+      <span class="tab-icon">💾</span><span class="tab-text">Daten</span>
+    </button>
+  </nav>
+
+  <noscript>
+    <p class="noscript">Gorilla Log benötigt JavaScript. Es werden keine externen Skripte geladen –
+    die App läuft vollständig lokal auf deinem Gerät.</p>
+  </noscript>
+</body>
+</html>

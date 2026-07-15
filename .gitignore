@@ -1,0 +1,50 @@
+# Abhängigkeiten
+node_modules
+
+# Test-Artefakte (Screenshots, lokale npm-Reste)
+test/*.png
+test/backup-test.json
+test/package.json
+test/package-lock.json
+
+# KI-Assistenten – lokale Konfig-/Arbeitsdateien bleiben lokal
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+GROK.md
+.grok.md
+codex.md
+.cursor/
+.cursorrules
+.cursorignore
+.aider*
+.codex/
+AGENTS.md
+.gemini/
+GEMINI.md
+.copilot/
+.windsurf/
+.windsurfrules
+.grok/
+
+# Editoren & IDEs
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# Betriebssystem
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+# Geheimnisse & Logs
+.env
+.env.*
+*.log

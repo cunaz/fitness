@@ -1,0 +1,91 @@
+let chromium;
+try { ({ chromium } = await import('playwright')); }
+catch { ({ chromium } = await import('playwright-core')); }
+import { writeFileSync } from 'node:fs';
+
+const BASIS = process.env.BASIS_URL || 'http://127.0.0.1:8765/';
+let fehler = 0;
+const pruefe = (bedingung, text) => {
+  console.log(`${bedingung ? 'OK  ' : 'FEHL'} ${text}`);
+  if (!bedingung) fehler++;
+};
+
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PFAD || undefined });
+const kontext = await browser.newContext({ viewport: { width: 393, height: 851 }, locale: 'de-CH' });
+const seite = await kontext.newPage();
+
+// --- A) "Letzte Einheit": Eintrag von vor 3 Tagen einspielen ---
+await seite.goto(BASIS, { waitUntil: 'networkidle' });
+await seite.evaluate(() => {
+  const daten = JSON.parse(localStorage.getItem('gorillalog.v1'));
+  const gid = daten.geraete.find((g) => g.name === 'Latzug').id;
+  const vor3Tagen = Date.now() - 3 * 86400000;
+  daten.log.push(
+    { id: 'alt1', ts: vor3Tagen, gid, kg: 50, wdh: 12, einst: { Beinpolster: '3' }, notiz: 'sauber' },
+    { id: 'alt2', ts: vor3Tagen + 120000, gid, kg: 55, wdh: 10, einst: { Beinpolster: '3' }, notiz: '' },
+  );
+  localStorage.setItem('gorillalog.v1', JSON.stringify(daten));
+});
+await seite.goto(BASIS, { waitUntil: 'networkidle' });
+await seite.fill('.suche', 'latzug');
+await seite.click('.geraet-eintrag');
+await seite.waitForSelector('.geraet-kopf');
+const einheitKarte = await seite.locator('.karte').first().textContent();
+pruefe(einheitKarte.includes('Letzte Einheit'), 'Karte "Letzte Einheit" wird angezeigt');
+pruefe(einheitKarte.includes('50 kg × 12') && einheitKarte.includes('55 kg × 10'), 'Beide Sätze der letzten Einheit sichtbar');
+pruefe(einheitKarte.includes('Beinpolster: 3'), 'Einstellungen der letzten Einheit sichtbar');
+pruefe((await seite.locator('.steller input').nth(0).inputValue()) === '55', 'Gewicht mit letztem Satz (55) vorbelegt');
+await seite.screenshot({ path: 'shot-6-letzte-einheit.png' });
+
+// --- B) Backup-Import (ersetzt Daten nach Bestätigung) ---
+const backup = {
+  app: 'gorilla-log', version: 1, exportiertAm: '2026-07-01T10:00:00Z',
+  daten: {
+    geraete: [
+      { id: 'g1', nr: '7', name: 'Test-Presse', gruppe: 'Brust', felder: ['Sitz'], archiviert: false },
+    ],
+    log: [
+      { id: 'l1', ts: Date.now() - 86400000, gid: 'g1', kg: 30, wdh: 15, einst: { Sitz: '2' }, notiz: '' },
+      { id: 'kaputt', ts: 'unsinn', gid: 'g1', kg: 30, wdh: 15, einst: {}, notiz: '' },
+      { id: 'fremd', ts: Date.now(), gid: 'unbekannt', kg: 30, wdh: 15, einst: {}, notiz: '' },
+    ],
+  },
+};
+writeFileSync('backup-test.json', JSON.stringify(backup));
+await seite.click('#tabs button[data-route="daten"]');
+let letzterDialog = '';
+seite.on('dialog', (d) => { letzterDialog = d.message(); d.accept(); });
+const [dateiwahl] = await Promise.all([
+  seite.waitForEvent('filechooser'),
+  seite.click('button:has-text("Backup importieren")'),
+]);
+await dateiwahl.setFiles('backup-test.json');
+await seite.waitForFunction(() => document.querySelector('.stat-tabelle') && document.body.textContent.includes('1 aktiv'));
+const stat = await seite.locator('.stat-tabelle').textContent();
+pruefe(stat.includes('1 aktiv'), 'Import: 1 Gerät übernommen');
+pruefe(stat.includes('Gespeicherte Sätze1'), `Import: ungültige Log-Einträge verworfen, 1 gültiger übernommen`);
+await seite.click('#tabs button[data-route=""]');
+await seite.waitForSelector('.suche');
+await seite.fill('.suche', '');
+await seite.waitForSelector('.geraet-eintrag');
+pruefe((await seite.locator('.geraet-eintrag').textContent()).includes('Test-Presse'), 'Importiertes Gerät in Trainingsliste');
+
+// --- C) Defekter Speicher: wird gesichert, App startet frisch ---
+await seite.evaluate(() => localStorage.setItem('gorillalog.v1', '{kaputt###'));
+await seite.goto(BASIS, { waitUntil: 'networkidle' });
+pruefe((await seite.locator('.geraet-eintrag').count()) === 24, 'Defekter Speicher → Neustart mit Standardkatalog');
+const gerettet = await seite.evaluate(() => localStorage.getItem('gorillalog.v1.defekt'));
+pruefe(gerettet === '{kaputt###', 'Defekte Daten wurden zur Rettung beiseitegelegt');
+
+// --- D) Ungültige Eingaben werden abgelehnt ---
+await seite.click('.geraet-eintrag');
+await seite.waitForSelector('.geraet-kopf');
+await seite.locator('.steller input').nth(1).fill('0');
+await seite.click('.btn-primaer');
+pruefe(letzterDialog.includes('Wiederholungen'), `Validierung: 0 Wiederholungen abgelehnt („${letzterDialog.slice(0, 40)}…“)`);
+const anzahlSaetze = await seite.evaluate(() => JSON.parse(localStorage.getItem('gorillalog.v1')).log.length);
+pruefe(anzahlSaetze === 0, 'Ungültiger Satz wurde nicht gespeichert');
+
+await browser.close();
+console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');
+process.exit(fehler ? 1 : 0);
