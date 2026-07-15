@@ -15,9 +15,10 @@ Gerät. Der Code besteht aus reinem HTML/CSS/JavaScript ohne einzige Abhängigke
 
 ## Funktionen
 
-- **Schnell erfassen:** Gerät per Nummer oder Name suchen, Gewicht und
-  Wiederholungen mit grossen −/+-Tasten einstellen, Satz speichern. Die Werte
-  des letzten Trainings sind bereits vorbelegt.
+- **Schnell erfassen:** Gerät per Nummer oder Name suchen, Gewicht, Sätze und
+  Wiederholungen mit grossen −/+-Tasten einstellen und mit einem Tipp
+  speichern – einzeln oder als Block (z. B. 3 × 10). Die Werte des letzten
+  Trainings sind bereits vorbelegt.
 - **Letzte Einheit im Blick:** Beim Öffnen eines Geräts erscheinen die Sätze,
   Einstellungen und Notizen vom letzten Mal.
 - **Geräte-Einstellungen merken:** Pro Gerät frei definierbare Felder wie

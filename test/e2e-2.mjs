@@ -80,11 +80,20 @@ pruefe(gerettet === '{kaputt###', 'Defekte Daten wurden zur Rettung beiseitegele
 // --- D) Ungültige Eingaben werden abgelehnt ---
 await seite.click('.geraet-eintrag');
 await seite.waitForSelector('.geraet-kopf');
-await seite.locator('.steller input').nth(1).fill('0');
+await seite.locator('.steller input').nth(2).fill('0');
 await seite.click('.btn-primaer');
 pruefe(letzterDialog.includes('Wiederholungen'), `Validierung: 0 Wiederholungen abgelehnt („${letzterDialog.slice(0, 40)}…“)`);
 const anzahlSaetze = await seite.evaluate(() => JSON.parse(localStorage.getItem('gorillalog.v1')).log.length);
 pruefe(anzahlSaetze === 0, 'Ungültiger Satz wurde nicht gespeichert');
+
+// --- E) Mehrere Sätze auf einmal speichern ---
+await seite.locator('.steller input').nth(2).fill('10');
+await seite.locator('.steller input').nth(1).fill('3');
+pruefe((await seite.locator('.btn-primaer').textContent()).includes('3 Sätze'), 'Knopf zeigt "3 Sätze speichern"');
+await seite.click('.btn-primaer');
+await seite.waitForFunction(() => document.querySelectorAll('.satz-chip').length === 3);
+const logNachBlock = await seite.evaluate(() => JSON.parse(localStorage.getItem('gorillalog.v1')).log.length);
+pruefe(logNachBlock === 3, 'Block-Speichern legt 3 einzelne Sätze an');
 
 await browser.close();
 console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');

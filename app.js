@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -425,6 +425,10 @@ function renderGeraetAnsicht(geraet) {
     type: 'number', inputmode: 'decimal', step: '0.5', min: '0', max: '2000',
     value: letzter ? String(letzter.kg) : '20', 'aria-label': 'Gewicht in kg',
   });
+  const saetzeFeld = el('input', {
+    type: 'number', inputmode: 'numeric', step: '1', min: '1', max: '20',
+    value: '1', 'aria-label': 'Anzahl Sätze',
+  });
   const wdhFeld = el('input', {
     type: 'number', inputmode: 'numeric', step: '1', min: '1', max: '10000',
     value: letzter ? String(letzter.wdh) : '10', 'aria-label': 'Wiederholungen',
@@ -434,8 +438,10 @@ function renderGeraetAnsicht(geraet) {
     const wert = zahlLesen(feld.value);
     const neu = Math.min(max, Math.max(min, (Number.isFinite(wert) ? wert : min) + richtung * schritt));
     feld.value = String(Math.round(neu * 100) / 100);
+    feld.dispatchEvent(new Event('input'));
   };
   const kgStellen = stelle(kgFeld, 2.5, 0, 2000);
+  const saetzeStellen = stelle(saetzeFeld, 1, 1, 20);
   const wdhStellen = stelle(wdhFeld, 1, 1, 10000);
 
   const einstFelder = new Map();
@@ -453,30 +459,42 @@ function renderGeraetAnsicht(geraet) {
   const speichernKnopf = el('button', { type: 'button', class: 'btn btn-primaer' }, 'Satz speichern');
   const heuteBereich = el('div');
 
+  const knopfText = () => {
+    const n = zahlLesen(saetzeFeld.value);
+    return Number.isInteger(n) && n > 1 ? `${n} Sätze speichern` : 'Satz speichern';
+  };
+  saetzeFeld.addEventListener('input', () => { speichernKnopf.textContent = knopfText(); });
+
   speichernKnopf.addEventListener('click', () => {
     const kg = zahlLesen(kgFeld.value);
+    const saetze = zahlLesen(saetzeFeld.value);
     const wdh = zahlLesen(wdhFeld.value);
     if (!Number.isFinite(kg) || kg < 0 || kg > 2000) { alert('Bitte ein gültiges Gewicht (0–2000 kg) eingeben.'); return; }
+    if (!Number.isInteger(saetze) || saetze < 1 || saetze > 20) { alert('Bitte eine gültige Satz-Anzahl (1–20) eingeben.'); return; }
     if (!Number.isInteger(wdh) || wdh < 1 || wdh > 10000) { alert('Bitte gültige Wiederholungen (ganze Zahl ab 1) eingeben.'); return; }
     const einst = {};
     for (const [feldName, eingabe] of einstFelder) {
       const wert = eingabe.value.trim().slice(0, 60);
       if (wert) einst[feldName] = wert;
     }
-    daten.log.push({
-      id: neuId(), ts: Date.now(), gid: geraet.id,
-      kg: Math.round(kg * 100) / 100, wdh, einst,
-      notiz: notizFeld.value.trim().slice(0, 500),
-    });
+    const notiz = notizFeld.value.trim().slice(0, 500);
+    const basisTs = Date.now();
+    for (let i = 0; i < saetze; i++) {
+      daten.log.push({
+        id: neuId(), ts: basisTs + i, gid: geraet.id,
+        kg: Math.round(kg * 100) / 100, wdh, einst: { ...einst }, notiz,
+      });
+    }
     if (speichere()) {
       if (navigator.vibrate) navigator.vibrate(40);
-      speichernKnopf.replaceChildren(el('span', { class: 'ok-blitz' }, '✓ gespeichert'));
+      speichernKnopf.replaceChildren(el('span', { class: 'ok-blitz' },
+        saetze > 1 ? `✓ ${saetze} Sätze gespeichert` : '✓ gespeichert'));
     } else {
-      // Eintrag bleibt im Arbeitsspeicher (Export weiterhin möglich), aber
+      // Einträge bleiben im Arbeitsspeicher (Export weiterhin möglich), aber
       // kein falsches Erfolgssignal zeigen.
       speichernKnopf.replaceChildren('⚠ nicht gespeichert');
     }
-    setTimeout(() => speichernKnopf.replaceChildren('Satz speichern'), 1400);
+    setTimeout(() => speichernKnopf.replaceChildren(knopfText()), 1400);
     renderHeuteSaetze(heuteBereich, geraet);
   });
 
@@ -486,7 +504,12 @@ function renderGeraetAnsicht(geraet) {
       el('button', { type: 'button', 'aria-label': 'Gewicht verringern', onclick: () => kgStellen(-1) }, '−'),
       kgFeld,
       el('button', { type: 'button', 'aria-label': 'Gewicht erhöhen', onclick: () => kgStellen(1) }, '+')),
-    el('label', null, 'Wiederholungen'),
+    el('label', null, 'Sätze'),
+    el('div', { class: 'steller' },
+      el('button', { type: 'button', 'aria-label': 'Sätze verringern', onclick: () => saetzeStellen(-1) }, '−'),
+      saetzeFeld,
+      el('button', { type: 'button', 'aria-label': 'Sätze erhöhen', onclick: () => saetzeStellen(1) }, '+')),
+    el('label', null, 'Wiederholungen (pro Satz)'),
     el('div', { class: 'steller' },
       el('button', { type: 'button', 'aria-label': 'Wiederholungen verringern', onclick: () => wdhStellen(-1) }, '−'),
       wdhFeld,

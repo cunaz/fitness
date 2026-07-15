@@ -55,10 +55,10 @@ await seite.waitForSelector('.satz-chip');
 const chip1 = await seite.locator('.satz-chip').first().textContent();
 pruefe(chip1.includes('25 kg × 10'), `Satz gespeichert: ${chip1.trim()}`);
 
-// zweiter Satz mit weniger Wiederholungen
+// zweiter Satz mit weniger Wiederholungen (Steller: 0=Gewicht, 1=Sätze, 2=Wiederholungen)
 const minusKnoepfe = seite.locator('.steller button:has-text("−")');
-await minusKnoepfe.nth(1).click();
-await minusKnoepfe.nth(1).click();
+await minusKnoepfe.nth(2).click();
+await minusKnoepfe.nth(2).click();
 await seite.click('.btn-primaer');
 await seite.waitForFunction(() => document.querySelectorAll('.satz-chip').length >= 2);
 pruefe(await seite.locator('.satz-chip').count() === 2, 'Zweiter Satz (25 kg × 8) gespeichert');
@@ -75,7 +75,7 @@ pruefe((await seite.locator('.geraet-zuletzt').first().textContent()).includes('
 await seite.click('.geraet-eintrag');
 await seite.waitForSelector('.geraet-kopf');
 pruefe(await seite.locator('.steller input').nth(0).inputValue() === '25', 'Gewicht mit letztem Wert (25) vorbelegt');
-pruefe(await seite.locator('.steller input').nth(1).inputValue() === '8', 'Wiederholungen mit letztem Wert (8) vorbelegt');
+pruefe(await seite.locator('.steller input').nth(2).inputValue() === '8', 'Wiederholungen mit letztem Wert (8) vorbelegt');
 pruefe(await seite.locator('.karte input[type="text"]').first().inputValue() === 'Stufe 4', 'Einstellung "Rückenlehne: Stufe 4" vorbelegt');
 
 // 6) Satz löschen
