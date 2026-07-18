@@ -21,8 +21,8 @@ await seite.evaluate(() => {
   const gid = daten.geraete.find((g) => g.name === 'Latzug').id;
   const vor3Tagen = Date.now() - 3 * 86400000;
   daten.log.push(
-    { id: 'alt1', ts: vor3Tagen, gid, kg: 50, wdh: 12, einst: { Beinpolster: '3' }, notiz: 'sauber' },
-    { id: 'alt2', ts: vor3Tagen + 120000, gid, kg: 55, wdh: 10, einst: { Beinpolster: '3' }, notiz: '' },
+    { id: 'alt1', ts: vor3Tagen, gid, kg: 50, wdh: 12, einst: { Einstellung: '4' }, notiz: 'sauber' },
+    { id: 'alt2', ts: vor3Tagen + 120000, gid, kg: 55, wdh: 10, einst: { Einstellung: '4' }, notiz: '' },
   );
   localStorage.setItem('gorillalog.v1', JSON.stringify(daten));
 });
@@ -33,7 +33,7 @@ await seite.waitForSelector('.geraet-kopf');
 const einheitKarte = await seite.locator('.karte').first().textContent();
 pruefe(einheitKarte.includes('Letzte Einheit'), 'Karte "Letzte Einheit" wird angezeigt');
 pruefe(einheitKarte.includes('50 kg × 12') && einheitKarte.includes('55 kg × 10'), 'Beide Sätze der letzten Einheit sichtbar');
-pruefe(einheitKarte.includes('Beinpolster: 3'), 'Einstellungen der letzten Einheit sichtbar');
+pruefe(einheitKarte.includes('Einstellung: 4'), 'Einstellungen der letzten Einheit sichtbar');
 pruefe((await seite.locator('.steller input').nth(0).inputValue()) === '55', 'Gewicht mit letztem Satz (55) vorbelegt');
 await seite.screenshot({ path: 'shot-6-letzte-einheit.png' });
 
@@ -73,7 +73,7 @@ pruefe((await seite.locator('.geraet-eintrag').textContent()).includes('Test-Pre
 // --- C) Defekter Speicher: wird gesichert, App startet frisch ---
 await seite.evaluate(() => localStorage.setItem('gorillalog.v1', '{kaputt###'));
 await seite.goto(BASIS, { waitUntil: 'networkidle' });
-pruefe((await seite.locator('.geraet-eintrag').count()) === 24, 'Defekter Speicher → Neustart mit Standardkatalog');
+pruefe((await seite.locator('.geraet-eintrag').count()) === 9, 'Defekter Speicher → Neustart mit Standardkatalog');
 const gerettet = await seite.evaluate(() => localStorage.getItem('gorillalog.v1.defekt'));
 pruefe(gerettet === '{kaputt###', 'Defekte Daten wurden zur Rettung beiseitegelegt');
 

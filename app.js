@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.0.3';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -74,35 +74,20 @@ function zahlLesen(wert) {
 }
 
 /* ============================== Standard-Gerätekatalog ============================== */
-/* Typische Geräte eines Studios (gym80/Technogym-Klassiker). Nummern und Namen
- * lassen sich unter „Geräte“ an das eigene Studio anpassen. */
+/* Startkatalog nach Trainingsplan. Nummern und Namen lassen sich unter
+ * „Geräte“ jederzeit anpassen; Übungen ohne Nummer stehen am Listenende. */
 
 function standardGeraete() {
   const liste = [
-    ['1', 'Brustpresse', 'Brust', ['Sitzhöhe']],
-    ['2', 'Butterfly', 'Brust', ['Sitzhöhe', 'Armhebel']],
-    ['3', 'Latzug', 'Rücken', ['Beinpolster']],
-    ['4', 'Rudermaschine', 'Rücken', ['Sitzhöhe', 'Brustpolster']],
-    ['5', 'Reverse Butterfly', 'Rücken', ['Sitzhöhe', 'Armhebel']],
-    ['6', 'Rückenstrecker', 'Rücken', ['Polsterhöhe']],
-    ['7', 'Schulterpresse', 'Schultern', ['Sitzhöhe']],
-    ['8', 'Seitheben-Maschine', 'Schultern', ['Sitzhöhe']],
-    ['9', 'Bizeps-Maschine', 'Arme', ['Sitzhöhe', 'Armauflage']],
-    ['10', 'Trizeps-Maschine', 'Arme', ['Sitzhöhe']],
-    ['11', 'Dip-Maschine', 'Arme', ['Sitzhöhe']],
-    ['12', 'Beinpresse', 'Beine', ['Rückenlehne']],
-    ['13', 'Beinstrecker', 'Beine', ['Rückenlehne', 'Fusspolster']],
-    ['14', 'Beinbeuger', 'Beine', ['Rückenlehne', 'Fusspolster']],
-    ['15', 'Abduktoren', 'Beine', []],
-    ['16', 'Adduktoren', 'Beine', []],
-    ['17', 'Wadenheben', 'Beine', ['Sitzhöhe']],
-    ['18', 'Multipresse (Smith)', 'Ganzkörper', []],
-    ['19', 'Kabelzug', 'Ganzkörper', ['Höhe', 'Griff']],
-    ['20', 'Bauchpresse', 'Rumpf', ['Sitzhöhe']],
-    ['21', 'Rotary Torso', 'Rumpf', ['Sitzhöhe']],
-    ['22', 'Laufband', 'Cardio', []],
-    ['23', 'Crosstrainer', 'Cardio', []],
-    ['24', 'Ergometer', 'Cardio', []],
+    ['14', 'Beinbeuger', 'Beine', ['Einstellung']],
+    ['15', 'Beinpresse', 'Beine', []],
+    ['23', 'Brustpresse', 'Brust', ['Einstellung']],
+    ['24', 'Butterfly', 'Brust', ['Einstellung']],
+    ['24', 'Reverse Butterfly', 'Schultern', ['Einstellung']],
+    ['25', 'Latzug', 'Rücken', ['Einstellung']],
+    ['37', 'Trizepsdrücken', 'Arme', []],
+    ['', 'Freemotion Bizepscurl', 'Arme', []],
+    ['', 'Rotatoren Gummiband (rot)', 'Schultern', []],
   ];
   return liste.map(([nr, name, gruppe, felder]) => ({
     id: neuId(), nr, name, gruppe, felder, archiviert: false,

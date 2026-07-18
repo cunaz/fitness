@@ -26,20 +26,20 @@ seite.on('pageerror', (e) => konsolenFehler.push(String(e)));
 await seite.goto(BASIS, { waitUntil: 'networkidle' });
 pruefe(await seite.title() === 'Gorilla Log', 'Titel ist "Gorilla Log"');
 const anzahlGeraete = await seite.locator('.geraet-eintrag').count();
-pruefe(anzahlGeraete === 24, `Standardkatalog: 24 Geräte gerendert (${anzahlGeraete})`);
+pruefe(anzahlGeraete === 9, `Standardkatalog: 9 Geräte gerendert (${anzahlGeraete})`);
 
 // 2) Suche
 await seite.fill('.suche', 'bein');
 const gefiltert = await seite.locator('.geraet-eintrag').count();
-pruefe(gefiltert === 6, `Suche "bein" matcht Name + Muskelgruppe "Beine": 6 Treffer (${gefiltert})`);
-await seite.fill('.suche', '12');
-pruefe(await seite.locator('.geraet-eintrag').count() === 1, 'Suche nach Nummer "12" liefert 1 Treffer');
+pruefe(gefiltert === 2, `Suche "bein" matcht Name + Muskelgruppe "Beine": 2 Treffer (${gefiltert})`);
+await seite.fill('.suche', '14');
+pruefe(await seite.locator('.geraet-eintrag').count() === 1, 'Suche nach Nummer "14" liefert 1 Treffer');
 await seite.screenshot({ path: 'shot-1-suche.png' });
 
-// 3) Satz erfassen an Beinpresse
+// 3) Satz erfassen am Beinbeuger (#14, mit Einstellungs-Feld)
 await seite.click('.geraet-eintrag');
 await seite.waitForSelector('.geraet-kopf');
-pruefe((await seite.textContent('.geraet-kopf h2')).includes('Beinpresse'), 'Geräteansicht Beinpresse geöffnet');
+pruefe((await seite.textContent('.geraet-kopf h2')).includes('Beinbeuger'), 'Geräteansicht Beinbeuger geöffnet');
 
 // Gewicht: Standard 20 kg → 2× "+" = 25 kg
 const plusKnoepfe = seite.locator('.steller button:has-text("+")');
@@ -48,8 +48,8 @@ await plusKnoepfe.nth(0).click();
 const kgWert = await seite.locator('.steller input').nth(0).inputValue();
 pruefe(kgWert === '25', `Gewichts-Steller: 20 → 25 kg (${kgWert})`);
 
-// Einstellungs-Feld Rückenlehne ausfüllen
-await seite.locator('.karte input[type="text"]').first().fill('Stufe 4');
+// Einstellungs-Feld ausfüllen
+await seite.locator('.karte input[type="text"]').first().fill('Stufe 3');
 await seite.click('.btn-primaer');
 await seite.waitForSelector('.satz-chip');
 const chip1 = await seite.locator('.satz-chip').first().textContent();
@@ -68,7 +68,7 @@ await seite.screenshot({ path: 'shot-2-geraet.png' });
 await seite.goto(BASIS, { waitUntil: 'networkidle' });
 const heuteKarte = await seite.locator('.karte').first().textContent();
 pruefe(heuteKarte.includes('2 Sätze an 1 Gerät'), `Heute-Zusammenfassung nach Reload: ${heuteKarte.trim().slice(0, 40)}…`);
-await seite.fill('.suche', '12');
+await seite.fill('.suche', '14');
 pruefe((await seite.locator('.geraet-zuletzt').first().textContent()).includes('heute'), 'Geräteliste zeigt "heute" + letzten Satz');
 
 // 5) Vorbelegung aus letztem Satz + letzte Einstellungen
@@ -76,7 +76,7 @@ await seite.click('.geraet-eintrag');
 await seite.waitForSelector('.geraet-kopf');
 pruefe(await seite.locator('.steller input').nth(0).inputValue() === '25', 'Gewicht mit letztem Wert (25) vorbelegt');
 pruefe(await seite.locator('.steller input').nth(2).inputValue() === '8', 'Wiederholungen mit letztem Wert (8) vorbelegt');
-pruefe(await seite.locator('.karte input[type="text"]').first().inputValue() === 'Stufe 4', 'Einstellung "Rückenlehne: Stufe 4" vorbelegt');
+pruefe(await seite.locator('.karte input[type="text"]').first().inputValue() === 'Stufe 3', 'Einstellung "Stufe 3" vorbelegt');
 
 // 6) Satz löschen
 seite.once('dialog', (d) => d.accept());
@@ -88,7 +88,7 @@ pruefe(true, 'Satz löschen mit Bestätigungsdialog funktioniert');
 await seite.click('#tabs button[data-route="verlauf"]');
 await seite.waitForSelector('.tag-kopf');
 const verlaufText = await seite.locator('#view').textContent();
-pruefe(verlaufText.includes('Beinpresse') && verlaufText.includes('Rückenlehne: Stufe 4'),
+pruefe(verlaufText.includes('Beinbeuger') && verlaufText.includes('Einstellung: Stufe 3'),
   'Verlauf zeigt Tag, Gerät und Einstellungen');
 await seite.screenshot({ path: 'shot-3-verlauf.png' });
 
@@ -118,7 +118,7 @@ pruefe((await seite.locator('.geraet-eintrag', { hasText: 'Hip Thrust' }).textCo
 await seite.click('#tabs button[data-route="daten"]');
 await seite.waitForSelector('.stat-tabelle');
 const statText = await seite.locator('.stat-tabelle').textContent();
-pruefe(statText.includes('25 aktiv'), 'Statistik: 25 aktive Geräte');
+pruefe(statText.includes('10 aktiv'), 'Statistik: 10 aktive Geräte');
 pruefe(statText.includes('Trainingstage'), 'Statistik: Trainingstage vorhanden');
 const [download] = await Promise.all([
   seite.waitForEvent('download'),
@@ -127,7 +127,7 @@ const [download] = await Promise.all([
 const pfad = await download.path();
 const { readFileSync } = await import('node:fs');
 const backup = JSON.parse(readFileSync(pfad, 'utf8'));
-pruefe(backup.app === 'gorilla-log' && backup.daten.log.length === 1 && backup.daten.geraete.length === 25,
+pruefe(backup.app === 'gorilla-log' && backup.daten.log.length === 1 && backup.daten.geraete.length === 10,
   `Export: gültiges JSON-Backup (${backup.daten.geraete.length} Geräte, ${backup.daten.log.length} Satz)`);
 await seite.screenshot({ path: 'shot-4-daten.png' });
 

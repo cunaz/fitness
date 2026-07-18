@@ -24,9 +24,9 @@ Gerät. Der Code besteht aus reinem HTML/CSS/JavaScript ohne einzige Abhängigke
 - **Geräte-Einstellungen merken:** Pro Gerät frei definierbare Felder wie
   Sitzhöhe oder Rückenlehne – nie wieder die richtige Stufe suchen.
 - **Verlauf:** Alle Trainingstage chronologisch, pro Gerät gruppiert.
-- **Eigener Gerätekatalog:** 24 typische Studio-Geräte sind vorbefüllt;
-  Nummern, Namen, Muskelgruppen und Felder lassen sich ans eigene Studio
-  anpassen.
+- **Eigener Gerätekatalog:** Ein Startkatalog ist vorbefüllt; Nummern, Namen,
+  Muskelgruppen und Felder lassen sich ans eigene Studio anpassen. Auch
+  Übungen ohne Gerätenummer (Freihanteln, Bänder) sind möglich.
 - **Backup:** Kompletter Datenbestand als JSON-Datei exportieren und wieder
   importieren.
 - **Offline:** Nach dem ersten Öffnen funktioniert die App ohne Internet.
