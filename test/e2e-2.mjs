@@ -95,6 +95,29 @@ await seite.waitForFunction(() => document.querySelectorAll('.satz-chip').length
 const logNachBlock = await seite.evaluate(() => JSON.parse(localStorage.getItem('gorillalog.v1')).log.length);
 pruefe(logNachBlock === 3, 'Block-Speichern legt 3 einzelne Sätze an');
 
+// --- F) Max-Satz (bis zur Ermüdung) ---
+await seite.locator('.steller input').nth(0).fill('120');
+await seite.locator('.steller input').nth(1).fill('1');
+await seite.locator('.steller input').nth(2).fill('4');
+await seite.check('#max-satz');
+await seite.click('.btn-primaer');
+await seite.waitForFunction(() => document.querySelectorAll('.satz-chip').length === 4);
+const maxChip = await seite.locator('.satz-chip').last().textContent();
+pruefe(maxChip.includes('120 kg × 4') && maxChip.includes('⚡'), `Max-Satz mit ⚡ markiert (${maxChip.trim()})`);
+const maxFlags = await seite.evaluate(() => {
+  const log = JSON.parse(localStorage.getItem('gorillalog.v1')).log;
+  return log[log.length - 1].max === true && log[0].max === false;
+});
+pruefe(maxFlags, 'max-Flag korrekt gespeichert (Max-Satz true, normale Sätze false)');
+
+// Vorbelegung ignoriert den Max-Satz (Arbeitsgewicht statt 120 kg)
+await seite.click('#tabs button[data-route=""]');
+await seite.waitForSelector('.geraet-eintrag');
+await seite.click('.geraet-eintrag');
+await seite.waitForSelector('.geraet-kopf');
+pruefe((await seite.locator('.steller input').nth(0).inputValue()) === '20',
+  'Vorbelegung nutzt letzten normalen Satz (20 kg), nicht den Max-Satz (120 kg)');
+
 await browser.close();
 console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');
 process.exit(fehler ? 1 : 0);

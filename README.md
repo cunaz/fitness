@@ -21,6 +21,9 @@ Gerät. Der Code besteht aus reinem HTML/CSS/JavaScript ohne einzige Abhängigke
   Trainings sind bereits vorbelegt.
 - **Letzte Einheit im Blick:** Beim Öffnen eines Geräts erscheinen die Sätze,
   Einstellungen und Notizen vom letzten Mal.
+- **Max-Sätze:** Ein Satz „bis zur Ermüdung“ lässt sich per Haken markieren
+  und wird überall mit ⚡ gekennzeichnet – klassische Sätze und
+  Ermüdungs-Sätze funktionieren nebeneinander.
 - **Geräte-Einstellungen merken:** Pro Gerät frei definierbare Felder wie
   Sitzhöhe oder Rückenlehne – nie wieder die richtige Stufe suchen.
 - **Verlauf:** Alle Trainingstage chronologisch, pro Gerät gruppiert.

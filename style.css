@@ -268,7 +268,27 @@ input:focus { outline: 2px solid var(--akzent); border-color: transparent; }
 
 .satz-chip .loeschen:active { color: var(--rot); }
 
+.satz-chip.max { border-color: var(--akzent); }
+
 .einst-zeile { color: var(--text-dim); font-size: 0.85rem; margin-top: 6px; }
+
+/* Ankreuzzeile (Max-Satz) */
+.kontrollzeile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 0.95rem;
+  margin: 14px 0 4px;
+  cursor: pointer;
+}
+
+.kontrollzeile input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--akzent);
+  cursor: pointer;
+}
 
 .ok-blitz { color: var(--gruen); font-weight: 700; }
 

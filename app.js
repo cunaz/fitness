@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.4';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -150,6 +150,7 @@ function normalisiereDaten(roh) {
     logIds.add(id);
     log.push({
       id, ts, gid: e.gid, kg, wdh, einst,
+      max: e.max === true, // Satz „bis zur Ermüdung“
       notiz: String(e.notiz ?? '').slice(0, 500),
     });
   }
@@ -366,7 +367,7 @@ function renderGeraetListe(container) {
         el('div', { class: 'geraet-name' }, g.name),
         el('div', { class: 'geraet-meta' }, g.gruppe || '')),
       el('span', { class: 'geraet-zuletzt' },
-        letzter ? [relativAnzeige(letzter.ts), el('br'), `${kgAnzeige(letzter.kg)} × ${letzter.wdh}`] : '')),
+        letzter ? [relativAnzeige(letzter.ts), el('br'), satzText(letzter)] : '')),
     );
   }
 }
@@ -375,6 +376,14 @@ function renderGeraetListe(container) {
 
 function einstAnzeige(einst) {
   return Object.entries(einst).map(([k, v]) => `${k}: ${v}`).join(' · ');
+}
+
+function satzText(e) {
+  return `${kgAnzeige(e.kg)} × ${e.wdh}${e.max ? ' ⚡' : ''}`;
+}
+
+function satzChip(e, praefix = '') {
+  return el('span', { class: `satz-chip${e.max ? ' max' : ''}` }, `${praefix}${satzText(e)}`);
 }
 
 function renderGeraetAnsicht(geraet) {
@@ -394,16 +403,17 @@ function renderGeraetAnsicht(geraet) {
     ansicht.append(
       el('div', { class: 'karte' },
         el('div', { class: 'geraet-meta' }, `Letzte Einheit · ${datumAnzeige(letzte.ts)}`),
-        el('div', { class: 'satz-chips' },
-          einheit.map((e) => el('span', { class: 'satz-chip' }, `${kgAnzeige(e.kg)} × ${e.wdh}`))),
+        el('div', { class: 'satz-chips' }, einheit.map((e) => satzChip(e))),
         Object.keys(letzte.einst).length
           ? el('div', { class: 'einst-zeile' }, einstAnzeige(letzte.einst)) : null,
         letzte.notiz ? el('div', { class: 'notiz-zeile' }, letzte.notiz) : null),
     );
   }
 
-  // Formular, vorbelegt mit dem jüngsten Eintrag dieses Geräts
-  const letzter = letzterEintrag(geraet.id);
+  // Formular, vorbelegt mit dem jüngsten normalen Satz (Arbeitsgewicht) –
+  // ein Max-Satz soll nicht das nächste Training vorbelegen.
+  const juengster = letzterEintrag(geraet.id);
+  const letzter = [...logVonGeraet(geraet.id)].reverse().find((e) => !e.max) || juengster;
   const form = el('div', { class: 'karte' });
 
   const kgFeld = el('input', {
@@ -440,6 +450,7 @@ function renderGeraetAnsicht(geraet) {
     return [el('label', null, feldName), eingabe];
   });
 
+  const maxFeld = el('input', { type: 'checkbox', id: 'max-satz' });
   const notizFeld = el('input', { type: 'text', autocomplete: 'off', maxlength: '500', placeholder: 'optional' });
   const speichernKnopf = el('button', { type: 'button', class: 'btn btn-primaer' }, 'Satz speichern');
   const heuteBereich = el('div');
@@ -467,7 +478,8 @@ function renderGeraetAnsicht(geraet) {
     for (let i = 0; i < saetze; i++) {
       daten.log.push({
         id: neuId(), ts: basisTs + i, gid: geraet.id,
-        kg: Math.round(kg * 100) / 100, wdh, einst: { ...einst }, notiz,
+        kg: Math.round(kg * 100) / 100, wdh, einst: { ...einst },
+        max: maxFeld.checked, notiz,
       });
     }
     if (speichere()) {
@@ -499,6 +511,8 @@ function renderGeraetAnsicht(geraet) {
       el('button', { type: 'button', 'aria-label': 'Wiederholungen verringern', onclick: () => wdhStellen(-1) }, '−'),
       wdhFeld,
       el('button', { type: 'button', 'aria-label': 'Wiederholungen erhöhen', onclick: () => wdhStellen(1) }, '+')),
+    el('label', { class: 'kontrollzeile', for: 'max-satz' },
+      maxFeld, 'Bis zur Ermüdung (Max-Satz) ⚡'),
     ...einstEingaben.flat(),
     el('label', null, 'Notiz'),
     notizFeld,
@@ -517,8 +531,8 @@ function renderHeuteSaetze(container, geraet) {
     el('div', { class: 'karte' },
       el('div', { class: 'geraet-meta' }, `Heute · ${saetze.length} ${saetze.length === 1 ? 'Satz' : 'Sätze'}`),
       el('div', { class: 'satz-chips' },
-        saetze.map((e, i) => el('span', { class: 'satz-chip' },
-          `${i + 1}. ${kgAnzeige(e.kg)} × ${e.wdh}`,
+        saetze.map((e, i) => el('span', { class: `satz-chip${e.max ? ' max' : ''}` },
+          `${i + 1}. ${satzText(e)}`,
           el('button', {
             type: 'button', class: 'loeschen', 'aria-label': 'Satz löschen',
             onclick: () => {
@@ -577,8 +591,8 @@ function renderVerlauf() {
           el('span', { class: 'nr' }, g && g.nr ? `#${g.nr} ` : ''),
           g ? g.name : 'Gelöschtes Gerät'),
           el('div', { class: 'satz-chips' },
-            saetze.map((e) => el('span', { class: 'satz-chip' },
-              `${kgAnzeige(e.kg)} × ${e.wdh}`,
+            saetze.map((e) => el('span', { class: `satz-chip${e.max ? ' max' : ''}` },
+              satzText(e),
               el('button', {
                 type: 'button', class: 'loeschen', 'aria-label': 'Satz löschen',
                 onclick: () => {
