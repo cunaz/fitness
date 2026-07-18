@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.5';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -96,12 +96,50 @@ function standardGeraete() {
 
 /* ============================== Datenhaltung ============================== */
 
+/* Format-Version der gespeicherten Daten. KOMPATIBILITÄTS-GARANTIE:
+ * Ändert sich das Format, wird DATEN_VERSION erhöht und in MIGRATIONEN eine
+ * Stufe ergänzt, die alte Datenstände automatisch anhebt. Alte Backups und
+ * localStorage-Stände bleiben so dauerhaft verwendbar – niemals eine
+ * Migrationsstufe entfernen. */
+const DATEN_VERSION = 1;
+const MIGRATIONEN = {
+  // Beispiel für die Zukunft:
+  // 1: (d) => ({ ...d, version: 2, geraete: d.geraete.map(...) }),
+};
+
+function migriereAlteVersionen(quelle) {
+  let d = quelle;
+  let v = Number(d.version) || 1;
+  while (v < DATEN_VERSION && typeof MIGRATIONEN[v] === 'function') {
+    d = MIGRATIONEN[v](d);
+    const neuV = Number(d.version) || v + 1;
+    if (neuV <= v) break; // Schutz vor Endlosschleife
+    v = neuV;
+  }
+  return d;
+}
+
+/* Unbekannte (künftige) Felder eines Eintrags erhalten, statt sie zu
+ * verwerfen – so überlebt ein Datenstand einer neueren App-Version den
+ * Umweg über eine ältere. Begrenzung schützt vor aufgeblähten Importen. */
+function unbekannteFelder(objekt, bekannt) {
+  const extras = {};
+  for (const [k, v] of Object.entries(objekt)) {
+    if (!bekannt.includes(k) && !RESERVIERTE_NAMEN.has(k)) extras[k] = v;
+  }
+  try {
+    if (JSON.stringify(extras).length > 4000) return {};
+  } catch { return {}; }
+  return extras;
+}
+
 /* Fremd-/Altdaten prüfen und in das interne Format bringen. Gibt null zurück,
  * wenn die Struktur grundsätzlich nicht passt. */
 function normalisiereDaten(roh) {
   if (!roh || typeof roh !== 'object') return null;
-  const quelle = roh.daten && typeof roh.daten === 'object' ? roh.daten : roh;
-  if (!Array.isArray(quelle.geraete) || !Array.isArray(quelle.log)) return null;
+  let quelle = roh.daten && typeof roh.daten === 'object' ? roh.daten : roh;
+  quelle = migriereAlteVersionen(quelle);
+  if (!quelle || !Array.isArray(quelle.geraete) || !Array.isArray(quelle.log)) return null;
 
   const geraete = [];
   const bekannteIds = new Set();
@@ -116,6 +154,7 @@ function normalisiereDaten(roh) {
           .filter((f) => f && !RESERVIERTE_NAMEN.has(f)))]
       : [];
     geraete.push({
+      ...unbekannteFelder(g, ['id', 'nr', 'name', 'gruppe', 'felder', 'archiviert']),
       id,
       nr: String(g.nr ?? '').slice(0, 10).trim(),
       name,
@@ -149,6 +188,7 @@ function normalisiereDaten(roh) {
     const id = typeof e.id === 'string' && e.id.length <= 64 && !logIds.has(e.id) ? e.id : neuId();
     logIds.add(id);
     log.push({
+      ...unbekannteFelder(e, ['id', 'ts', 'gid', 'kg', 'wdh', 'einst', 'max', 'notiz']),
       id, ts, gid: e.gid, kg, wdh, einst,
       max: e.max === true, // Satz „bis zur Ermüdung“
       notiz: String(e.notiz ?? '').slice(0, 500),
@@ -156,7 +196,12 @@ function normalisiereDaten(roh) {
   }
   log.sort((a, b) => a.ts - b.ts);
 
-  return { version: 1, geraete, log };
+  return {
+    ...unbekannteFelder(quelle, ['version', 'geraete', 'log']),
+    version: DATEN_VERSION,
+    geraete,
+    log,
+  };
 }
 
 /* Originaldaten zur Rettung beiseitelegen – ein bestehendes Rettungs-Backup
@@ -177,10 +222,12 @@ function ladeDaten() {
       const geparstRoh = JSON.parse(roh);
       const geparst = normalisiereDaten(geparstRoh);
       if (geparst) {
-        // Wurden einzelne Einträge verworfen, das Original sichern statt still zu kürzen.
         const quelle = geparstRoh.daten && typeof geparstRoh.daten === 'object' ? geparstRoh.daten : geparstRoh;
+        // Original sichern, wenn Einträge verworfen wurden oder der Stand von
+        // einer NEUEREN App-Version stammt (deren Format wir nicht voll kennen).
         const verlust = (Array.isArray(quelle.geraete) && quelle.geraete.length !== geparst.geraete.length)
-          || (Array.isArray(quelle.log) && quelle.log.length !== geparst.log.length);
+          || (Array.isArray(quelle.log) && quelle.log.length !== geparst.log.length)
+          || Number(quelle.version) > DATEN_VERSION;
         if (verlust) sichereDefekt(roh);
         return geparst;
       }
@@ -192,7 +239,7 @@ function ladeDaten() {
     sichereDefekt(roh);
     try { localStorage.removeItem(SPEICHER_SCHLUESSEL); } catch { /* nicht schreibbar */ }
   }
-  return { version: 1, geraete: standardGeraete(), log: [] };
+  return { version: DATEN_VERSION, geraete: standardGeraete(), log: [] };
 }
 
 let daten = ladeDaten();
@@ -780,9 +827,9 @@ function renderDaten() {
     type: 'button', class: 'btn btn-primaer',
     onclick: () => {
       const inhalt = JSON.stringify({
-        app: 'gorilla-log', version: 1,
+        app: 'gorilla-log', version: DATEN_VERSION,
         exportiertAm: new Date().toISOString(),
-        daten: { geraete: daten.geraete, log: daten.log },
+        daten: { ...daten, version: DATEN_VERSION },
       }, null, 1);
       const blob = new Blob([inhalt], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -832,7 +879,7 @@ function renderDaten() {
         localStorage.removeItem(SPEICHER_SCHLUESSEL);
         localStorage.removeItem(`${SPEICHER_SCHLUESSEL}.defekt`);
       } catch { /* Speicher nicht schreibbar */ }
-      daten = { version: 1, geraete: standardGeraete(), log: [] };
+      daten = { version: DATEN_VERSION, geraete: standardGeraete(), log: [] };
       bearbeiteId = null;
       suchtext = '';
       speichere();

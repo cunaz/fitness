@@ -63,6 +63,10 @@ python3 -m http.server
 - Daten liegen im lokalen Browser-Speicher (`localStorage`); die App fragt
   dauerhaften Speicher an und legt defekte Daten zur Rettung beiseite statt
   sie zu überschreiben.
+- **Kompatibilitäts-Garantie:** Das Datenformat ist versioniert. Künftige
+  App-Versionen migrieren alte Datenstände und Backups automatisch
+  (Migrationskette in `app.js`), und unbekannte Felder bleiben beim Laden
+  erhalten – ein App-Update macht gespeicherte Daten nie unbrauchbar.
 - Kein `innerHTML`, kein `eval`; importierte Backups werden feldweise
   validiert.
 - Der Service Worker cacht ausschliesslich die eigenen App-Dateien.

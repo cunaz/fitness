@@ -118,6 +118,34 @@ await seite.waitForSelector('.geraet-kopf');
 pruefe((await seite.locator('.steller input').nth(0).inputValue()) === '20',
   'Vorbelegung nutzt letzten normalen Satz (20 kg), nicht den Max-Satz (120 kg)');
 
+// --- G) Zukunftskompatibilität: unbekannte Felder + neuere Datenversion ---
+await seite.evaluate(() => {
+  localStorage.removeItem('gorillalog.v1.defekt');
+  const zukunft = {
+    version: 99,
+    notizbuch: 'bleibt erhalten',
+    geraete: [{ id: 'z1', nr: '1', name: 'Zukunfts-Presse', gruppe: 'Brust', felder: [], archiviert: false, farbe: 'rot' }],
+    log: [{ id: 'zl1', ts: Date.now() - 3600000, gid: 'z1', kg: 40, wdh: 10, einst: {}, notiz: '', rpe: 8 }],
+  };
+  localStorage.setItem('gorillalog.v1', JSON.stringify(zukunft));
+});
+await seite.goto(BASIS, { waitUntil: 'networkidle' });
+pruefe((await seite.locator('#view').textContent()).includes('Zukunfts-Presse'),
+  'Datenstand einer neueren Version bleibt nutzbar');
+// Einen Satz speichern, damit der Stand einmal durch speichere() läuft
+await seite.click('.geraet-eintrag');
+await seite.waitForSelector('.geraet-kopf');
+await seite.click('.btn-primaer');
+await seite.waitForSelector('.satz-chip');
+const zukunftErhalten = await seite.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('gorillalog.v1'));
+  return d.notizbuch === 'bleibt erhalten'
+    && d.geraete[0].farbe === 'rot'
+    && d.log[0].rpe === 8
+    && !!localStorage.getItem('gorillalog.v1.defekt');
+});
+pruefe(zukunftErhalten, 'Unbekannte Felder überleben Laden + Speichern; Original wurde gesichert');
+
 await browser.close();
 console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');
 process.exit(fehler ? 1 : 0);
