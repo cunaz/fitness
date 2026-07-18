@@ -26,7 +26,10 @@ seite.on('pageerror', (e) => konsolenFehler.push(String(e)));
 await seite.goto(BASIS, { waitUntil: 'networkidle' });
 pruefe(await seite.title() === 'Gorilla Log', 'Titel ist "Gorilla Log"');
 const anzahlGeraete = await seite.locator('.geraet-eintrag').count();
-pruefe(anzahlGeraete === 9, `Standardkatalog: 9 Geräte gerendert (${anzahlGeraete})`);
+pruefe(anzahlGeraete === 10, `Standardkatalog: 10 Geräte gerendert, inkl. Einwärmen (${anzahlGeraete})`);
+const planKarte = await seite.locator('.karte').first().textContent();
+pruefe(planKarte.includes('Trainingsplan heute: 0 von 10') && planKarte.includes('Einwärmen'),
+  'Plan-Karte zeigt Fortschritt und "Als Nächstes: Einwärmen"');
 
 // 2) Suche
 await seite.fill('.suche', 'bein');
@@ -54,6 +57,7 @@ await seite.click('.btn-primaer');
 await seite.waitForSelector('.satz-chip');
 const chip1 = await seite.locator('.satz-chip').first().textContent();
 pruefe(chip1.includes('25 kg × 10'), `Satz gespeichert: ${chip1.trim()}`);
+pruefe(await seite.locator('.pause-banner').isHidden(), 'Pausen-Timer ist standardmässig aus (Opt-in)');
 
 // zweiter Satz mit weniger Wiederholungen (Steller: 0=Gewicht, 1=Sätze, 2=Wiederholungen)
 const minusKnoepfe = seite.locator('.steller button:has-text("−")');
@@ -77,6 +81,15 @@ await seite.waitForSelector('.geraet-kopf');
 pruefe(await seite.locator('.steller input').nth(0).inputValue() === '25', 'Gewicht mit letztem Wert (25) vorbelegt');
 pruefe(await seite.locator('.steller input').nth(2).inputValue() === '8', 'Wiederholungen mit letztem Wert (8) vorbelegt');
 pruefe(await seite.locator('.karte input[type="text"]').first().inputValue() === 'Stufe 3', 'Einstellung "Stufe 3" vorbelegt');
+
+// 5b) Satz korrigieren: Chip antippen, Gewicht ändern, speichern
+await seite.locator('.satz-chip.tippbar').first().click();
+await seite.waitForFunction(() => document.body.textContent.includes('Änderungen speichern'));
+await seite.locator('.steller input').nth(0).fill('30');
+await seite.click('.btn-primaer');
+await seite.waitForFunction(() => document.body.textContent.includes('30 kg × 10'));
+const logNachEdit = await seite.evaluate(() => JSON.parse(localStorage.getItem('gorillalog.v1')).log.length);
+pruefe(logNachEdit === 2, 'Satz korrigiert (25 → 30 kg), Anzahl Sätze unverändert');
 
 // 6) Satz löschen
 seite.once('dialog', (d) => d.accept());
@@ -118,7 +131,7 @@ pruefe((await seite.locator('.geraet-eintrag', { hasText: 'Hip Thrust' }).textCo
 await seite.click('#tabs button[data-route="daten"]');
 await seite.waitForSelector('.stat-tabelle');
 const statText = await seite.locator('.stat-tabelle').textContent();
-pruefe(statText.includes('10 aktiv'), 'Statistik: 10 aktive Geräte');
+pruefe(statText.includes('11 aktiv'), 'Statistik: 11 aktive Geräte');
 pruefe(statText.includes('Trainingstage'), 'Statistik: Trainingstage vorhanden');
 const [download] = await Promise.all([
   seite.waitForEvent('download'),
@@ -127,7 +140,7 @@ const [download] = await Promise.all([
 const pfad = await download.path();
 const { readFileSync } = await import('node:fs');
 const backup = JSON.parse(readFileSync(pfad, 'utf8'));
-pruefe(backup.app === 'gorilla-log' && backup.daten.log.length === 1 && backup.daten.geraete.length === 10,
+pruefe(backup.app === 'gorilla-log' && backup.daten.log.length === 1 && backup.daten.geraete.length === 11,
   `Export: gültiges JSON-Backup (${backup.daten.geraete.length} Geräte, ${backup.daten.log.length} Satz)`);
 await seite.screenshot({ path: 'shot-4-daten.png' });
 

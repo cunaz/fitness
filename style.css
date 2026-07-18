@@ -136,6 +136,8 @@ h2:first-child { margin-top: 4px; }
   justify-content: center;
 }
 
+.nr-badge.erledigt { background: var(--gruen); }
+
 .geraet-info { flex: 1 1 auto; min-width: 0; }
 
 .geraet-name {
@@ -269,6 +271,57 @@ input:focus { outline: 2px solid var(--akzent); border-color: transparent; }
 .satz-chip .loeschen:active { color: var(--rot); }
 
 .satz-chip.max { border-color: var(--akzent); }
+
+.satz-chip.tippbar { cursor: pointer; }
+.satz-chip.tippbar:active { background: var(--akzent-dunkel); }
+
+/* Plan-Karte im Training-Tab */
+.plan-naechstes { margin-top: 10px; background: var(--akzent); color: #1c1305; }
+.plan-fertig { color: var(--gruen); font-weight: 700; margin-top: 8px; }
+.heute-zeile { margin-top: 12px; }
+
+/* Fortschritts-Balken */
+.fortschritt-zeile { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.fortschritt-datum { flex: 0 0 44px; color: var(--text-dim); font-size: 0.8rem; }
+.fortschritt-spur { flex: 1 1 auto; background: var(--bg); border-radius: 6px; overflow: hidden; }
+.fortschritt-balken { display: block; height: 16px; background: var(--akzent-dunkel); border-radius: 6px; }
+.fortschritt-balken.max { background: var(--akzent); }
+.fortschritt-wert {
+  flex: 0 0 auto;
+  min-width: 84px;
+  text-align: right;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pausen-Timer */
+.pause-banner {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--tabs-hoehe) + env(safe-area-inset-bottom, 0px) + 12px);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--akzent);
+  color: #1c1305;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+
+.pause-banner button {
+  background: rgba(0, 0, 0, 0.15);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 700;
+  color: #1c1305;
+  cursor: pointer;
+}
 
 .einst-zeile { color: var(--text-dim); font-size: 0.85rem; margin-top: 6px; }
 

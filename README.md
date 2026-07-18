@@ -24,6 +24,15 @@ Gerät. Der Code besteht aus reinem HTML/CSS/JavaScript ohne einzige Abhängigke
 - **Max-Sätze:** Ein Satz „bis zur Ermüdung“ lässt sich per Haken markieren
   und wird überall mit ⚡ gekennzeichnet – klassische Sätze und
   Ermüdungs-Sätze funktionieren nebeneinander.
+- **Korrigieren:** Jeden gespeicherten Satz antippen (heute oder im Verlauf),
+  Werte ändern, speichern – kein Löschen und Neu-Eintippen nötig.
+- **Fortschritt:** Pro Gerät die Entwicklung des Top-Satzes über die letzten
+  Einheiten als Balkenübersicht.
+- **Trainingsplan:** Geräte mit Plan-Position erscheinen im Training-Tab in
+  Plan-Reihenfolge; Erledigtes wird grün abgehakt und „Als Nächstes“ führt
+  durch die Einheit.
+- **Pausen-Timer (optional):** Auf Wunsch startet nach jedem gespeicherten
+  Satz ein 90-Sekunden-Countdown mit Vibration (unter „Daten“ aktivierbar).
 - **Geräte-Einstellungen merken:** Pro Gerät frei definierbare Felder wie
   Sitzhöhe oder Rückenlehne – nie wieder die richtige Stufe suchen.
 - **Verlauf:** Alle Trainingstage chronologisch, pro Gerät gruppiert.

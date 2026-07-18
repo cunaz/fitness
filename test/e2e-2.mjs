@@ -20,7 +20,9 @@ await seite.evaluate(() => {
   const daten = JSON.parse(localStorage.getItem('gorillalog.v1'));
   const gid = daten.geraete.find((g) => g.name === 'Latzug').id;
   const vor3Tagen = Date.now() - 3 * 86400000;
+  const vor6Tagen = Date.now() - 6 * 86400000;
   daten.log.push(
+    { id: 'alt0', ts: vor6Tagen, gid, kg: 45, wdh: 12, einst: { Einstellung: '4' }, notiz: '' },
     { id: 'alt1', ts: vor3Tagen, gid, kg: 50, wdh: 12, einst: { Einstellung: '4' }, notiz: 'sauber' },
     { id: 'alt2', ts: vor3Tagen + 120000, gid, kg: 55, wdh: 10, einst: { Einstellung: '4' }, notiz: '' },
   );
@@ -35,6 +37,8 @@ pruefe(einheitKarte.includes('Letzte Einheit'), 'Karte "Letzte Einheit" wird ang
 pruefe(einheitKarte.includes('50 kg × 12') && einheitKarte.includes('55 kg × 10'), 'Beide Sätze der letzten Einheit sichtbar');
 pruefe(einheitKarte.includes('Einstellung: 4'), 'Einstellungen der letzten Einheit sichtbar');
 pruefe((await seite.locator('.steller input').nth(0).inputValue()) === '55', 'Gewicht mit letztem Satz (55) vorbelegt');
+pruefe((await seite.locator('.fortschritt-zeile').count()) === 2,
+  'Fortschritts-Ansicht zeigt Top-Satz beider Einheiten (45 → 55 kg)');
 await seite.screenshot({ path: 'shot-6-letzte-einheit.png' });
 
 // --- B) Backup-Import (ersetzt Daten nach Bestätigung) ---
@@ -73,7 +77,7 @@ pruefe((await seite.locator('.geraet-eintrag').textContent()).includes('Test-Pre
 // --- C) Defekter Speicher: wird gesichert, App startet frisch ---
 await seite.evaluate(() => localStorage.setItem('gorillalog.v1', '{kaputt###'));
 await seite.goto(BASIS, { waitUntil: 'networkidle' });
-pruefe((await seite.locator('.geraet-eintrag').count()) === 9, 'Defekter Speicher → Neustart mit Standardkatalog');
+pruefe((await seite.locator('.geraet-eintrag').count()) === 10, 'Defekter Speicher → Neustart mit Standardkatalog');
 const gerettet = await seite.evaluate(() => localStorage.getItem('gorillalog.v1.defekt'));
 pruefe(gerettet === '{kaputt###', 'Defekte Daten wurden zur Rettung beiseitegelegt');
 
@@ -145,6 +149,24 @@ const zukunftErhalten = await seite.evaluate(() => {
     && !!localStorage.getItem('gorillalog.v1.defekt');
 });
 pruefe(zukunftErhalten, 'Unbekannte Felder überleben Laden + Speichern; Original wurde gesichert');
+
+// --- H) Pausen-Timer per Einstellung aktivierbar ---
+await seite.click('#tabs button[data-route="daten"]');
+await seite.waitForSelector('#einstellung-pause');
+await seite.check('#einstellung-pause');
+await seite.click('#tabs button[data-route=""]');
+await seite.waitForSelector('.suche');
+await seite.fill('.suche', '');
+await seite.click('.geraet-eintrag');
+await seite.waitForSelector('.geraet-kopf');
+await seite.click('.btn-primaer');
+await seite.waitForFunction(() => {
+  const b = document.querySelector('.pause-banner');
+  return b && !b.classList.contains('versteckt') && b.textContent.includes('Pause');
+});
+pruefe(true, 'Pausen-Timer erscheint nach Aktivierung unter Daten → Einstellungen');
+await seite.click('.pause-banner button[aria-label="Pause ausblenden"]');
+pruefe(await seite.locator('.pause-banner').isHidden(), 'Pausen-Timer lässt sich ausblenden');
 
 await browser.close();
 console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');

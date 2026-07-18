@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.0.5';
+const APP_VERSION = '1.1.0';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -59,6 +59,7 @@ function relativAnzeige(ts) {
   const tag = tagesSchluessel(ts);
   if (tag === heute) return 'heute';
   const diffTage = Math.round((new Date(heute) - new Date(tag)) / 86400000);
+  if (diffTage <= 0) return 'heute'; // Zeitstempel minimal in der Zukunft (Uhr-Drift)
   if (diffTage === 1) return 'gestern';
   if (diffTage < 30) return `vor ${diffTage} Tg.`;
   return new Date(ts).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -78,19 +79,21 @@ function zahlLesen(wert) {
  * „Geräte“ jederzeit anpassen; Übungen ohne Nummer stehen am Listenende. */
 
 function standardGeraete() {
+  // [Nr, Name, Muskelgruppe, Einstellungs-Felder, Plan-Position]
   const liste = [
-    ['14', 'Beinbeuger', 'Beine', ['Einstellung']],
-    ['15', 'Beinpresse', 'Beine', []],
-    ['23', 'Brustpresse', 'Brust', ['Einstellung']],
-    ['24', 'Butterfly', 'Brust', ['Einstellung']],
-    ['24', 'Reverse Butterfly', 'Schultern', ['Einstellung']],
-    ['25', 'Latzug', 'Rücken', ['Einstellung']],
-    ['37', 'Trizepsdrücken', 'Arme', []],
-    ['', 'Freemotion Bizepscurl', 'Arme', []],
-    ['', 'Rotatoren Gummiband (rot)', 'Schultern', []],
+    ['', 'Einwärmen', 'Cardio', [], 1],
+    ['15', 'Beinpresse', 'Beine', [], 2],
+    ['14', 'Beinbeuger', 'Beine', ['Einstellung'], 3],
+    ['25', 'Latzug', 'Rücken', ['Einstellung'], 4],
+    ['24', 'Reverse Butterfly', 'Schultern', ['Einstellung'], 5],
+    ['24', 'Butterfly', 'Brust', ['Einstellung'], 6],
+    ['23', 'Brustpresse', 'Brust', ['Einstellung'], 7],
+    ['', 'Freemotion Bizepscurl', 'Arme', [], 8],
+    ['', 'Rotatoren Gummiband (rot)', 'Schultern', [], 9],
+    ['37', 'Trizepsdrücken', 'Arme', [], 10],
   ];
-  return liste.map(([nr, name, gruppe, felder]) => ({
-    id: neuId(), nr, name, gruppe, felder, archiviert: false,
+  return liste.map(([nr, name, gruppe, felder, plan]) => ({
+    id: neuId(), nr, name, gruppe, felder, archiviert: false, plan,
   }));
 }
 
@@ -153,14 +156,17 @@ function normalisiereDaten(roh) {
       ? [...new Set(g.felder.slice(0, 10).map((f) => String(f).slice(0, 40).trim())
           .filter((f) => f && !RESERVIERTE_NAMEN.has(f)))]
       : [];
+    const planRoh = Number(g.plan);
     geraete.push({
-      ...unbekannteFelder(g, ['id', 'nr', 'name', 'gruppe', 'felder', 'archiviert']),
+      ...unbekannteFelder(g, ['id', 'nr', 'name', 'gruppe', 'felder', 'archiviert', 'plan']),
       id,
       nr: String(g.nr ?? '').slice(0, 10).trim(),
       name,
       gruppe: String(g.gruppe ?? '').slice(0, 40).trim(),
       felder,
       archiviert: g.archiviert === true,
+      // Position im Trainingsplan (optional): bestimmt die Reihenfolge im Training-Tab
+      plan: Number.isFinite(planRoh) && planRoh >= 1 && planRoh <= 999 ? Math.round(planRoh) : null,
     });
   }
 
@@ -261,6 +267,27 @@ try {
   if (!localStorage.getItem(SPEICHER_SCHLUESSEL)) speichere();
 } catch { /* Speicher nicht verfügbar – App läuft trotzdem, nur ohne Persistenz */ }
 
+/* ============================== App-Einstellungen ============================== */
+
+const EINSTELLUNGEN_SCHLUESSEL = 'gorillalog.einstellungen';
+
+function ladeEinstellungen() {
+  try {
+    const roh = JSON.parse(localStorage.getItem(EINSTELLUNGEN_SCHLUESSEL) || '{}');
+    return { pausenTimer: roh.pausenTimer === true };
+  } catch {
+    return { pausenTimer: false };
+  }
+}
+
+const einstellungen = ladeEinstellungen();
+
+function speichereEinstellungen() {
+  try {
+    localStorage.setItem(EINSTELLUNGEN_SCHLUESSEL, JSON.stringify(einstellungen));
+  } catch { /* nicht kritisch */ }
+}
+
 /* Beim ersten Start dauerhaften Speicher anfragen (verringert das Risiko,
  * dass der Browser die Daten bei Platzmangel löscht). */
 if (navigator.storage && navigator.storage.persist) {
@@ -273,14 +300,27 @@ function geraetVonId(id) {
   return daten.geraete.find((g) => g.id === id) || null;
 }
 
+function vergleicheNr(a, b) {
+  const na = parseFloat(a.nr);
+  const nb = parseFloat(b.nr);
+  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+  if (Number.isFinite(na) && !Number.isFinite(nb)) return -1;
+  if (!Number.isFinite(na) && Number.isFinite(nb)) return 1;
+  return a.name.localeCompare(b.name, 'de');
+}
+
 function geraeteSortiert() {
+  return [...daten.geraete].sort(vergleicheNr);
+}
+
+/* Für den Training-Tab: Geräte mit Plan-Position zuerst (in Plan-Reihenfolge),
+ * der Rest nach Nummer. */
+function planSortiert() {
   return [...daten.geraete].sort((a, b) => {
-    const na = parseFloat(a.nr);
-    const nb = parseFloat(b.nr);
-    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
-    if (Number.isFinite(na) && !Number.isFinite(nb)) return -1;
-    if (!Number.isFinite(na) && Number.isFinite(nb)) return 1;
-    return a.name.localeCompare(b.name, 'de');
+    const pa = a.plan ?? Infinity;
+    const pb = b.plan ?? Infinity;
+    if (pa !== pb) return pa - pb;
+    return vergleicheNr(a, b);
   });
 }
 
@@ -357,23 +397,43 @@ function render() {
 function renderTraining() {
   const heute = tagesSchluessel(Date.now());
   const saetzeDesTages = daten.log.filter((e) => tagesSchluessel(e.ts) === heute);
+  const planGeraete = daten.geraete
+    .filter((g) => !g.archiviert && g.plan !== null && g.plan !== undefined)
+    .sort((a, b) => a.plan - b.plan);
+
+  const kopfKarte = el('div', { class: 'karte' });
+
+  if (planGeraete.length) {
+    const offen = planGeraete.filter((g) => !saetzeHeute(g.id).length);
+    kopfKarte.append(el('div', null,
+      `Trainingsplan heute: ${planGeraete.length - offen.length} von ${planGeraete.length} erledigt`));
+    if (offen.length) {
+      const naechstes = offen[0];
+      kopfKarte.append(el('button', {
+        type: 'button', class: 'btn btn-klein plan-naechstes',
+        onclick: () => navigiere(`geraet/${encodeURIComponent(naechstes.id)}`),
+      }, `Als Nächstes: ${naechstes.nr ? `#${naechstes.nr} ` : ''}${naechstes.name} ›`));
+    } else {
+      kopfKarte.append(el('div', { class: 'plan-fertig' }, 'Plan komplett ✓ 💪'));
+    }
+  }
 
   if (saetzeDesTages.length) {
     const proGeraet = new Map();
     for (const e of saetzeDesTages) {
       proGeraet.set(e.gid, (proGeraet.get(e.gid) || 0) + 1);
     }
-    ansicht.append(
-      el('div', { class: 'karte' },
-        el('div', null, `Heute: ${saetzeDesTages.length} ${saetzeDesTages.length === 1 ? 'Satz' : 'Sätze'} an ${proGeraet.size} ${proGeraet.size === 1 ? 'Gerät' : 'Geräten'}`),
-        el('div', { class: 'satz-chips' },
-          [...proGeraet.entries()].map(([gid, anzahl]) => {
-            const g = geraetVonId(gid);
-            return el('span', { class: 'satz-chip' }, `${g ? g.name : '?'} · ${anzahl}×`);
-          })),
-      ),
+    kopfKarte.append(
+      el('div', { class: planGeraete.length ? 'heute-zeile' : undefined }, `Heute: ${saetzeDesTages.length} ${saetzeDesTages.length === 1 ? 'Satz' : 'Sätze'} an ${proGeraet.size} ${proGeraet.size === 1 ? 'Gerät' : 'Geräten'}`),
+      el('div', { class: 'satz-chips' },
+        [...proGeraet.entries()].map(([gid, anzahl]) => {
+          const g = geraetVonId(gid);
+          return el('span', { class: 'satz-chip' }, `${g ? g.name : '?'} · ${anzahl}×`);
+        })),
     );
   }
+
+  if (kopfKarte.childNodes.length) ansicht.append(kopfKarte);
 
   const suche = el('input', {
     class: 'suche', type: 'text', placeholder: 'Gerät suchen (Nummer oder Name) …',
@@ -389,7 +449,7 @@ function renderTraining() {
 
 function renderGeraetListe(container) {
   const filter = suchtext.trim().toLowerCase();
-  const geraete = geraeteSortiert().filter((g) => !g.archiviert).filter((g) => {
+  const geraete = planSortiert().filter((g) => !g.archiviert).filter((g) => {
     if (!filter) return true;
     return g.nr.toLowerCase().startsWith(filter)
       || g.name.toLowerCase().includes(filter)
@@ -404,12 +464,13 @@ function renderGeraetListe(container) {
   }
   for (const g of geraete) {
     const letzter = letzterEintrag(g.id);
+    const heuteErledigt = saetzeHeute(g.id).length > 0;
     container.append(
       el('button', {
         type: 'button', class: 'geraet-eintrag',
         onclick: () => navigiere(`geraet/${encodeURIComponent(g.id)}`),
       },
-      el('span', { class: 'nr-badge' }, g.nr || '–'),
+      el('span', { class: `nr-badge${heuteErledigt ? ' erledigt' : ''}` }, heuteErledigt ? '✓' : (g.nr || '–')),
       el('span', { class: 'geraet-info' },
         el('div', { class: 'geraet-name' }, g.name),
         el('div', { class: 'geraet-meta' }, g.gruppe || '')),
@@ -429,11 +490,21 @@ function satzText(e) {
   return `${kgAnzeige(e.kg)} × ${e.wdh}${e.max ? ' ⚡' : ''}`;
 }
 
-function satzChip(e, praefix = '') {
-  return el('span', { class: `satz-chip${e.max ? ' max' : ''}` }, `${praefix}${satzText(e)}`);
+function satzChip(e, praefix = '', beimTippen = null) {
+  return el('span', {
+    class: `satz-chip${e.max ? ' max' : ''}${beimTippen ? ' tippbar' : ''}`,
+    onclick: beimTippen || undefined,
+  }, `${praefix}${satzText(e)}`);
 }
 
+let bearbeiteSatzId = null; // ID des Satzes, der gerade korrigiert wird
+
 function renderGeraetAnsicht(geraet) {
+  const satzInBearbeitung = bearbeiteSatzId
+    ? daten.log.find((e) => e.id === bearbeiteSatzId && e.gid === geraet.id) || null
+    : null;
+  if (!satzInBearbeitung) bearbeiteSatzId = null;
+
   ansicht.append(
     el('button', { type: 'button', class: 'zurueck', onclick: () => history.back() }, '‹ Zurück'),
     el('div', { class: 'geraet-kopf' },
@@ -450,22 +521,25 @@ function renderGeraetAnsicht(geraet) {
     ansicht.append(
       el('div', { class: 'karte' },
         el('div', { class: 'geraet-meta' }, `Letzte Einheit · ${datumAnzeige(letzte.ts)}`),
-        el('div', { class: 'satz-chips' }, einheit.map((e) => satzChip(e))),
+        el('div', { class: 'satz-chips' },
+          einheit.map((e) => satzChip(e, '', () => { bearbeiteSatzId = e.id; render(); }))),
         Object.keys(letzte.einst).length
           ? el('div', { class: 'einst-zeile' }, einstAnzeige(letzte.einst)) : null,
         letzte.notiz ? el('div', { class: 'notiz-zeile' }, letzte.notiz) : null),
     );
   }
 
-  // Formular, vorbelegt mit dem jüngsten normalen Satz (Arbeitsgewicht) –
-  // ein Max-Satz soll nicht das nächste Training vorbelegen.
-  const juengster = letzterEintrag(geraet.id);
-  const letzter = [...logVonGeraet(geraet.id)].reverse().find((e) => !e.max) || juengster;
+  // Formular: beim Korrigieren mit dem angetippten Satz vorbelegt, sonst mit
+  // dem jüngsten normalen Satz (Arbeitsgewicht) – ein Max-Satz soll nicht das
+  // nächste Training vorbelegen.
+  const vorlage = satzInBearbeitung
+    || [...logVonGeraet(geraet.id)].reverse().find((e) => !e.max)
+    || letzterEintrag(geraet.id);
   const form = el('div', { class: 'karte' });
 
   const kgFeld = el('input', {
     type: 'number', inputmode: 'decimal', step: '0.5', min: '0', max: '2000',
-    value: letzter ? String(letzter.kg) : '20', 'aria-label': 'Gewicht in kg',
+    value: vorlage ? String(vorlage.kg) : '20', 'aria-label': 'Gewicht in kg',
   });
   const saetzeFeld = el('input', {
     type: 'number', inputmode: 'numeric', step: '1', min: '1', max: '20',
@@ -473,7 +547,7 @@ function renderGeraetAnsicht(geraet) {
   });
   const wdhFeld = el('input', {
     type: 'number', inputmode: 'numeric', step: '1', min: '1', max: '10000',
-    value: letzter ? String(letzter.wdh) : '10', 'aria-label': 'Wiederholungen',
+    value: vorlage ? String(vorlage.wdh) : '10', 'aria-label': 'Wiederholungen',
   });
 
   const stelle = (feld, schritt, min, max) => (richtung) => {
@@ -490,27 +564,31 @@ function renderGeraetAnsicht(geraet) {
   const einstEingaben = geraet.felder.map((feldName) => {
     const eingabe = el('input', {
       type: 'text', autocomplete: 'off', maxlength: '60',
-      value: letzter && Object.prototype.hasOwnProperty.call(letzter.einst, feldName)
-        ? letzter.einst[feldName] : '',
+      value: vorlage && Object.prototype.hasOwnProperty.call(vorlage.einst, feldName)
+        ? vorlage.einst[feldName] : '',
     });
     einstFelder.set(feldName, eingabe);
     return [el('label', null, feldName), eingabe];
   });
 
   const maxFeld = el('input', { type: 'checkbox', id: 'max-satz' });
+  maxFeld.checked = !!(satzInBearbeitung && satzInBearbeitung.max);
   const notizFeld = el('input', { type: 'text', autocomplete: 'off', maxlength: '500', placeholder: 'optional' });
-  const speichernKnopf = el('button', { type: 'button', class: 'btn btn-primaer' }, 'Satz speichern');
+  if (satzInBearbeitung) notizFeld.value = satzInBearbeitung.notiz;
+  const speichernKnopf = el('button', { type: 'button', class: 'btn btn-primaer' });
   const heuteBereich = el('div');
 
   const knopfText = () => {
+    if (satzInBearbeitung) return 'Änderungen speichern';
     const n = zahlLesen(saetzeFeld.value);
     return Number.isInteger(n) && n > 1 ? `${n} Sätze speichern` : 'Satz speichern';
   };
+  speichernKnopf.textContent = knopfText();
   saetzeFeld.addEventListener('input', () => { speichernKnopf.textContent = knopfText(); });
 
   speichernKnopf.addEventListener('click', () => {
     const kg = zahlLesen(kgFeld.value);
-    const saetze = zahlLesen(saetzeFeld.value);
+    const saetze = satzInBearbeitung ? 1 : zahlLesen(saetzeFeld.value);
     const wdh = zahlLesen(wdhFeld.value);
     if (!Number.isFinite(kg) || kg < 0 || kg > 2000) { alert('Bitte ein gültiges Gewicht (0–2000 kg) eingeben.'); return; }
     if (!Number.isInteger(saetze) || saetze < 1 || saetze > 20) { alert('Bitte eine gültige Satz-Anzahl (1–20) eingeben.'); return; }
@@ -521,6 +599,19 @@ function renderGeraetAnsicht(geraet) {
       if (wert) einst[feldName] = wert;
     }
     const notiz = notizFeld.value.trim().slice(0, 500);
+
+    if (satzInBearbeitung) {
+      // Korrektur: bestehenden Satz aktualisieren, Zeitstempel bleibt
+      Object.assign(satzInBearbeitung, {
+        kg: Math.round(kg * 100) / 100, wdh, einst: { ...einst },
+        max: maxFeld.checked, notiz,
+      });
+      speichere();
+      bearbeiteSatzId = null;
+      render();
+      return;
+    }
+
     const basisTs = Date.now();
     for (let i = 0; i < saetze; i++) {
       daten.log.push({
@@ -533,6 +624,7 @@ function renderGeraetAnsicht(geraet) {
       if (navigator.vibrate) navigator.vibrate(40);
       speichernKnopf.replaceChildren(el('span', { class: 'ok-blitz' },
         saetze > 1 ? `✓ ${saetze} Sätze gespeichert` : '✓ gespeichert'));
+      if (einstellungen.pausenTimer) startePause(90);
     } else {
       // Einträge bleiben im Arbeitsspeicher (Export weiterhin möglich), aber
       // kein falsches Erfolgssignal zeigen.
@@ -543,17 +635,21 @@ function renderGeraetAnsicht(geraet) {
   });
 
   form.append(
+    ...(satzInBearbeitung ? [el('div', { class: 'geraet-meta' },
+      `Korrigieren: Satz vom ${datumAnzeige(satzInBearbeitung.ts)} (${satzText(satzInBearbeitung)})`)] : []),
     el('label', null, 'Gewicht (kg)'),
     el('div', { class: 'steller' },
       el('button', { type: 'button', 'aria-label': 'Gewicht verringern', onclick: () => kgStellen(-1) }, '−'),
       kgFeld,
       el('button', { type: 'button', 'aria-label': 'Gewicht erhöhen', onclick: () => kgStellen(1) }, '+')),
-    el('label', null, 'Sätze'),
-    el('div', { class: 'steller' },
-      el('button', { type: 'button', 'aria-label': 'Sätze verringern', onclick: () => saetzeStellen(-1) }, '−'),
-      saetzeFeld,
-      el('button', { type: 'button', 'aria-label': 'Sätze erhöhen', onclick: () => saetzeStellen(1) }, '+')),
-    el('label', null, 'Wiederholungen (pro Satz)'),
+    ...(satzInBearbeitung ? [] : [
+      el('label', null, 'Sätze'),
+      el('div', { class: 'steller' },
+        el('button', { type: 'button', 'aria-label': 'Sätze verringern', onclick: () => saetzeStellen(-1) }, '−'),
+        saetzeFeld,
+        el('button', { type: 'button', 'aria-label': 'Sätze erhöhen', onclick: () => saetzeStellen(1) }, '+')),
+    ]),
+    el('label', null, satzInBearbeitung ? 'Wiederholungen' : 'Wiederholungen (pro Satz)'),
     el('div', { class: 'steller' },
       el('button', { type: 'button', 'aria-label': 'Wiederholungen verringern', onclick: () => wdhStellen(-1) }, '−'),
       wdhFeld,
@@ -564,10 +660,16 @@ function renderGeraetAnsicht(geraet) {
     el('label', null, 'Notiz'),
     notizFeld,
     speichernKnopf,
+    ...(satzInBearbeitung ? [el('button', {
+      type: 'button', class: 'btn',
+      onclick: () => { bearbeiteSatzId = null; render(); },
+    }, 'Abbrechen')] : []),
   );
 
   ansicht.append(form, heuteBereich);
   renderHeuteSaetze(heuteBereich, geraet);
+  const fortschritt = renderFortschritt(geraet);
+  if (fortschritt) ansicht.append(fortschritt);
 }
 
 function renderHeuteSaetze(container, geraet) {
@@ -576,20 +678,50 @@ function renderHeuteSaetze(container, geraet) {
   if (!saetze.length) return;
   container.append(
     el('div', { class: 'karte' },
-      el('div', { class: 'geraet-meta' }, `Heute · ${saetze.length} ${saetze.length === 1 ? 'Satz' : 'Sätze'}`),
+      el('div', { class: 'geraet-meta' }, `Heute · ${saetze.length} ${saetze.length === 1 ? 'Satz' : 'Sätze'} · zum Korrigieren antippen`),
       el('div', { class: 'satz-chips' },
-        saetze.map((e, i) => el('span', { class: `satz-chip${e.max ? ' max' : ''}` },
-          `${i + 1}. ${satzText(e)}`,
-          el('button', {
-            type: 'button', class: 'loeschen', 'aria-label': 'Satz löschen',
-            onclick: () => {
-              if (!confirm(`Satz ${i + 1} (${kgAnzeige(e.kg)} × ${e.wdh}) löschen?`)) return;
-              daten.log = daten.log.filter((x) => x.id !== e.id);
-              speichere();
-              renderHeuteSaetze(container, geraet);
-            },
-          }, '✕'))))),
+        saetze.map((e, i) => el('span', {
+          class: `satz-chip tippbar${e.max ? ' max' : ''}`,
+          onclick: () => { bearbeiteSatzId = e.id; render(); },
+        },
+        `${i + 1}. ${satzText(e)}`,
+        el('button', {
+          type: 'button', class: 'loeschen', 'aria-label': 'Satz löschen',
+          onclick: (ev) => {
+            ev.stopPropagation();
+            if (!confirm(`Satz ${i + 1} (${kgAnzeige(e.kg)} × ${e.wdh}) löschen?`)) return;
+            daten.log = daten.log.filter((x) => x.id !== e.id);
+            if (bearbeiteSatzId === e.id) bearbeiteSatzId = null;
+            speichere();
+            render();
+          },
+        }, '✕'))))),
   );
+}
+
+/* Entwicklung des Top-Satzes (höchstes Gewicht pro Trainingstag) */
+function renderFortschritt(geraet) {
+  const proTag = new Map();
+  for (const e of logVonGeraet(geraet.id)) {
+    const tag = tagesSchluessel(e.ts);
+    const bisher = proTag.get(tag);
+    if (!bisher || e.kg > bisher.kg) proTag.set(tag, e);
+  }
+  const tage = [...proTag.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(-12);
+  if (tage.length < 2) return null;
+  const maxKg = Math.max(1, ...tage.map(([, e]) => e.kg));
+  const karte = el('div', { class: 'karte' },
+    el('div', { class: 'geraet-meta' }, `Fortschritt · Top-Satz der letzten ${tage.length} Einheiten`));
+  for (const [, e] of tage) {
+    const balken = el('span', { class: `fortschritt-balken${e.max ? ' max' : ''}` });
+    balken.style.width = `${Math.max(4, Math.round((e.kg / maxKg) * 100))}%`;
+    karte.append(el('div', { class: 'fortschritt-zeile' },
+      el('span', { class: 'fortschritt-datum' },
+        new Date(e.ts).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })),
+      el('span', { class: 'fortschritt-spur' }, balken),
+      el('span', { class: 'fortschritt-wert' }, satzText(e))));
+  }
+  return karte;
 }
 
 /* ============================== Ansicht: Verlauf ============================== */
@@ -638,19 +770,28 @@ function renderVerlauf() {
           el('span', { class: 'nr' }, g && g.nr ? `#${g.nr} ` : ''),
           g ? g.name : 'Gelöschtes Gerät'),
           el('div', { class: 'satz-chips' },
-            saetze.map((e) => el('span', { class: `satz-chip${e.max ? ' max' : ''}` },
-              satzText(e),
-              el('button', {
-                type: 'button', class: 'loeschen', 'aria-label': 'Satz löschen',
-                onclick: () => {
-                  if (!confirm(`Satz (${kgAnzeige(e.kg)} × ${e.wdh}) vom ${datumAnzeige(e.ts)} löschen?`)) return;
-                  daten.log = daten.log.filter((x) => x.id !== e.id);
-                  speichere();
-                  const y = window.scrollY;
-                  render();
-                  window.scrollTo(0, y);
-                },
-              }, '✕')))),
+            saetze.map((e) => el('span', {
+              class: `satz-chip tippbar${e.max ? ' max' : ''}`,
+              onclick: () => {
+                if (!g) return;
+                bearbeiteSatzId = e.id;
+                navigiere(`geraet/${encodeURIComponent(g.id)}`);
+              },
+            },
+            satzText(e),
+            el('button', {
+              type: 'button', class: 'loeschen', 'aria-label': 'Satz löschen',
+              onclick: (ev) => {
+                ev.stopPropagation();
+                if (!confirm(`Satz (${kgAnzeige(e.kg)} × ${e.wdh}) vom ${datumAnzeige(e.ts)} löschen?`)) return;
+                daten.log = daten.log.filter((x) => x.id !== e.id);
+                if (bearbeiteSatzId === e.id) bearbeiteSatzId = null;
+                speichere();
+                const y = window.scrollY;
+                render();
+                window.scrollTo(0, y);
+              },
+            }, '✕')))),
           Object.keys(letzterSatz.einst).length
             ? el('div', { class: 'einst-zeile' }, einstAnzeige(letzterSatz.einst)) : null,
           saetze.filter((e) => e.notiz).map((e) => el('div', { class: 'notiz-zeile' }, e.notiz))),
@@ -700,7 +841,7 @@ function renderGeraeteVerwaltung() {
   el('span', { class: 'geraet-info' },
     el('div', { class: 'geraet-name' }, g.name),
     el('div', { class: 'geraet-meta' },
-      [g.gruppe, g.felder.join(', ')].filter(Boolean).join(' · '))),
+      [g.gruppe, g.plan ? `Plan-Pos. ${g.plan}` : '', g.felder.join(', ')].filter(Boolean).join(' · '))),
   el('span', { class: 'geraet-zuletzt' }, g.archiviert ? 'archiviert' : '✎'));
 
   ansicht.append(el('div', { class: 'geraet-liste' }, aktive.map(zeile)));
@@ -722,6 +863,10 @@ function renderGeraetFormular() {
     type: 'text', maxlength: '400', placeholder: 'z. B. Sitzhöhe, Rückenlehne',
     value: geraet ? geraet.felder.join(', ') : '',
   });
+  const planFeld = el('input', {
+    type: 'number', inputmode: 'numeric', min: '1', max: '999', placeholder: 'leer = nicht im Plan',
+    value: geraet && geraet.plan ? String(geraet.plan) : '',
+  });
 
   const form = el('div', { class: 'karte' },
     el('h2', null, geraet ? `Gerät bearbeiten: ${geraet.name}` : 'Neues Gerät'),
@@ -730,6 +875,7 @@ function renderGeraetFormular() {
     el('label', null, 'Muskelgruppe'), gruppeFeld,
     el('datalist', { id: 'gruppen-liste' }, MUSKELGRUPPEN.map((g) => el('option', { value: g }))),
     el('label', null, 'Einstellungs-Felder (kommagetrennt)'), felderFeld,
+    el('label', null, 'Position im Trainingsplan (bestimmt die Reihenfolge im Training-Tab)'), planFeld,
     el('div', { class: 'btn-reihe' },
       el('button', {
         type: 'button', class: 'btn btn-primaer',
@@ -739,14 +885,16 @@ function renderGeraetFormular() {
           const felder = [...new Set(felderFeld.value.split(',')
             .map((f) => f.trim().slice(0, 40))
             .filter((f) => f && !RESERVIERTE_NAMEN.has(f)))].slice(0, 10);
+          const planWert = Math.round(zahlLesen(planFeld.value));
           const werte = {
             nr: nrFeld.value.trim().slice(0, 10),
             name,
             gruppe: gruppeFeld.value.trim().slice(0, 40),
             felder,
+            plan: Number.isFinite(planWert) && planWert >= 1 && planWert <= 999 ? planWert : null,
           };
           if (geraet) Object.assign(geraet, werte);
-          else daten.geraete.push({ id: neuId(), archiviert: false, ...werte });
+          else daten.geraete.push({ id: neuId(), archiviert: false, plan: null, ...werte });
           speichere();
           bearbeiteId = null;
           render();
@@ -858,6 +1006,7 @@ function renderDaten() {
       if (!ok) return;
       daten = neu;
       bearbeiteId = null;
+      bearbeiteSatzId = null;
       suchtext = '';
       speichere();
       alert('Backup erfolgreich importiert.');
@@ -881,15 +1030,27 @@ function renderDaten() {
       } catch { /* Speicher nicht schreibbar */ }
       daten = { version: DATEN_VERSION, geraete: standardGeraete(), log: [] };
       bearbeiteId = null;
+      bearbeiteSatzId = null;
       suchtext = '';
       speichere();
       render();
     },
   }, 'Alle Daten löschen');
 
+  const timerFeld = el('input', { type: 'checkbox', id: 'einstellung-pause' });
+  timerFeld.checked = einstellungen.pausenTimer;
+  timerFeld.addEventListener('change', () => {
+    einstellungen.pausenTimer = timerFeld.checked;
+    speichereEinstellungen();
+  });
+
   ansicht.append(
     el('h2', null, 'Statistik'),
     statKarte,
+    el('h2', null, 'Einstellungen'),
+    el('div', { class: 'karte' },
+      el('label', { class: 'kontrollzeile', for: 'einstellung-pause' },
+        timerFeld, 'Pausen-Timer: nach jedem gespeicherten Satz 90-Sekunden-Countdown anzeigen')),
     el('h2', null, 'Backup'),
     el('div', { class: 'karte' },
       el('p', { class: 'hinweis' },
@@ -901,6 +1062,49 @@ function renderDaten() {
     el('p', { class: 'hinweis' },
       'Gorilla Log sendet nichts ins Internet: keine Konten, kein Tracking, keine externen Dienste.'),
   );
+}
+
+/* ============================== Pausen-Timer (optional) ============================== */
+
+let pauseEnde = 0;
+let pauseTicker = null;
+const pauseText = el('span', { class: 'pause-text' });
+const pausePlus = el('button', {
+  type: 'button',
+  onclick: () => { if (pauseEnde) { pauseEnde += 30000; aktualisierePause(); } },
+}, '+30 s');
+const pauseBanner = el('div', { class: 'pause-banner versteckt' },
+  pauseText, pausePlus,
+  el('button', { type: 'button', 'aria-label': 'Pause ausblenden', onclick: () => beendePause(true) }, '✕'));
+document.body.append(pauseBanner);
+
+function startePause(sekunden) {
+  pauseEnde = Date.now() + sekunden * 1000;
+  pauseBanner.classList.remove('versteckt');
+  pausePlus.classList.remove('versteckt');
+  if (!pauseTicker) pauseTicker = setInterval(aktualisierePause, 250);
+  aktualisierePause();
+}
+
+function beendePause(ausblenden) {
+  clearInterval(pauseTicker);
+  pauseTicker = null;
+  pauseEnde = 0;
+  if (ausblenden) pauseBanner.classList.add('versteckt');
+}
+
+function aktualisierePause() {
+  const rest = pauseEnde - Date.now();
+  if (rest <= 0) {
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    pauseText.textContent = 'Pause vorbei 💪';
+    pausePlus.classList.add('versteckt');
+    beendePause(false);
+    setTimeout(() => pauseBanner.classList.add('versteckt'), 4000);
+    return;
+  }
+  const s = Math.ceil(rest / 1000);
+  pauseText.textContent = `⏱ Pause ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 /* ============================== Start ============================== */
