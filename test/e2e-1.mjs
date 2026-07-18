@@ -26,7 +26,7 @@ seite.on('pageerror', (e) => konsolenFehler.push(String(e)));
 await seite.goto(BASIS, { waitUntil: 'networkidle' });
 pruefe(await seite.title() === 'Gorilla Log', 'Titel ist "Gorilla Log"');
 const anzahlGeraete = await seite.locator('.geraet-eintrag').count();
-pruefe(anzahlGeraete === 10, `Standardkatalog: 10 Geräte gerendert, inkl. Einwärmen (${anzahlGeraete})`);
+pruefe(anzahlGeraete === 12, `Standardkatalog: 12 Geräte gerendert, inkl. Einwärmen, Laufband, Fahrrad (${anzahlGeraete})`);
 const planKarte = await seite.locator('.karte').first().textContent();
 pruefe(planKarte.includes('Trainingsplan heute: 0 von 10') && planKarte.includes('Einwärmen'),
   'Plan-Karte zeigt Fortschritt und "Als Nächstes: Einwärmen"');
@@ -131,7 +131,7 @@ pruefe((await seite.locator('.geraet-eintrag', { hasText: 'Hip Thrust' }).textCo
 await seite.click('#tabs button[data-route="daten"]');
 await seite.waitForSelector('.stat-tabelle');
 const statText = await seite.locator('.stat-tabelle').textContent();
-pruefe(statText.includes('11 aktiv'), 'Statistik: 11 aktive Geräte');
+pruefe(statText.includes('13 aktiv'), 'Statistik: 13 aktive Geräte');
 pruefe(statText.includes('Trainingstage'), 'Statistik: Trainingstage vorhanden');
 const [download] = await Promise.all([
   seite.waitForEvent('download'),
@@ -140,7 +140,7 @@ const [download] = await Promise.all([
 const pfad = await download.path();
 const { readFileSync } = await import('node:fs');
 const backup = JSON.parse(readFileSync(pfad, 'utf8'));
-pruefe(backup.app === 'gorilla-log' && backup.daten.log.length === 1 && backup.daten.geraete.length === 11,
+pruefe(backup.app === 'gorilla-log' && backup.daten.log.length === 1 && backup.daten.geraete.length === 13,
   `Export: gültiges JSON-Backup (${backup.daten.geraete.length} Geräte, ${backup.daten.log.length} Satz)`);
 await seite.screenshot({ path: 'shot-4-daten.png' });
 

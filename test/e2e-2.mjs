@@ -77,7 +77,7 @@ pruefe((await seite.locator('.geraet-eintrag').textContent()).includes('Test-Pre
 // --- C) Defekter Speicher: wird gesichert, App startet frisch ---
 await seite.evaluate(() => localStorage.setItem('gorillalog.v1', '{kaputt###'));
 await seite.goto(BASIS, { waitUntil: 'networkidle' });
-pruefe((await seite.locator('.geraet-eintrag').count()) === 10, 'Defekter Speicher → Neustart mit Standardkatalog');
+pruefe((await seite.locator('.geraet-eintrag').count()) === 12, 'Defekter Speicher → Neustart mit Standardkatalog');
 const gerettet = await seite.evaluate(() => localStorage.getItem('gorillalog.v1.defekt'));
 pruefe(gerettet === '{kaputt###', 'Defekte Daten wurden zur Rettung beiseitegelegt');
 

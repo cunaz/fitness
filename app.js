@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -91,6 +91,8 @@ function standardGeraete() {
     ['', 'Freemotion Bizepscurl', 'Arme', [], 8],
     ['', 'Rotatoren Gummiband (rot)', 'Schultern', [], 9],
     ['37', 'Trizepsdrücken', 'Arme', [], 10],
+    ['', 'Laufband', 'Cardio', ['Tempo', 'Steigung'], null],
+    ['', 'Fahrrad', 'Cardio', ['Stufe'], null],
   ];
   return liste.map(([nr, name, gruppe, felder, plan]) => ({
     id: neuId(), nr, name, gruppe, felder, archiviert: false, plan,
