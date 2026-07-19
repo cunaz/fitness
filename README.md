@@ -104,6 +104,11 @@ Wer bereits ein Chromium installiert hat, kann stattdessen
 Umgebungsvariable `CHROMIUM_PFAD` angeben. `BASIS_URL` erlaubt eine
 abweichende Test-URL.
 
+## Entwicklung
+
+Arbeitsregeln, Architektur-Überblick und die geplanten nächsten Schritte
+stehen in [ENTWICKLUNG.md](ENTWICKLUNG.md).
+
 ## Lizenz
 
 [MIT](LICENSE)

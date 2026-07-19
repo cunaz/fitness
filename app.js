@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -731,7 +731,9 @@ function renderGeraetAnsicht(geraet) {
         distanzKm = Math.round(distanz * 100) / 100;
       }
       if (satzInBearbeitung) {
-        Object.assign(satzInBearbeitung, { dauerMin, distanzKm, einst: { ...einst }, notiz });
+        // max: false – bei Cardio gibt es keinen Max-Satz; ein ehemaliger
+        // Kraft-Eintrag verliert das Flag beim Umtragen.
+        Object.assign(satzInBearbeitung, { dauerMin, distanzKm, einst: { ...einst }, max: false, notiz });
         if (!distanzKm) delete satzInBearbeitung.distanzKm;
         speichere();
         bearbeiteSatzId = null;
@@ -856,7 +858,9 @@ function renderHeuteSaetze(container, geraet) {
 /* Entwicklung des Top-Satzes pro Trainingstag (Kraft: höchstes Gewicht,
  * Cardio: längste Dauer) */
 function renderFortschritt(geraet) {
-  const wert = (e) => (e.dauerMin ? e.dauerMin : e.kg);
+  // Metrik nach Gerätetyp, damit nie Kilogramm mit Minuten verglichen werden.
+  const cardio = istCardio(geraet);
+  const wert = (e) => (cardio ? (e.dauerMin || 0) : e.kg);
   const proTag = new Map();
   for (const e of logVonGeraet(geraet.id)) {
     const tag = tagesSchluessel(e.ts);
@@ -1351,6 +1355,7 @@ function renderDaten() {
 
 let pauseEnde = 0;
 let pauseTicker = null;
+let pauseAusblendung = null;
 const pauseText = el('span', { class: 'pause-text' });
 const pausePlus = el('button', {
   type: 'button',
@@ -1362,6 +1367,10 @@ const pauseBanner = el('div', { class: 'pause-banner versteckt' },
 document.body.append(pauseBanner);
 
 function startePause(sekunden) {
+  // Eine noch ausstehende Ausblendung vom letzten Countdown darf den
+  // neuen nicht mitten im Lauf verstecken.
+  clearTimeout(pauseAusblendung);
+  pauseAusblendung = null;
   pauseEnde = Date.now() + sekunden * 1000;
   pauseBanner.classList.remove('versteckt');
   pausePlus.classList.remove('versteckt');
@@ -1373,7 +1382,11 @@ function beendePause(ausblenden) {
   clearInterval(pauseTicker);
   pauseTicker = null;
   pauseEnde = 0;
-  if (ausblenden) pauseBanner.classList.add('versteckt');
+  if (ausblenden) {
+    clearTimeout(pauseAusblendung);
+    pauseAusblendung = null;
+    pauseBanner.classList.add('versteckt');
+  }
 }
 
 function aktualisierePause() {
@@ -1383,7 +1396,7 @@ function aktualisierePause() {
     pauseText.textContent = 'Pause vorbei 💪';
     pausePlus.classList.add('versteckt');
     beendePause(false);
-    setTimeout(() => pauseBanner.classList.add('versteckt'), 4000);
+    pauseAusblendung = setTimeout(() => pauseBanner.classList.add('versteckt'), 4000);
     return;
   }
   const s = Math.ceil(rest / 1000);

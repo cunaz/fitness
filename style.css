@@ -259,6 +259,7 @@ input:focus { outline: 2px solid var(--akzent); border-color: transparent; }
   border-radius: 999px;
   padding: 6px 12px;
   color: var(--text);
+  font-family: inherit; /* auch für Chips, die als <button> gerendert werden */
   font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
 }

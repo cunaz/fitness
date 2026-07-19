@@ -5,7 +5,7 @@
  * das ist der einzige atomare Update-Pfad für installierte Apps. */
 'use strict';
 
-const CACHE_NAME = 'gorillalog-v1.3.0';
+const CACHE_NAME = 'gorillalog-v1.3.1';
 const DATEIEN = [
   './',
   './index.html',
