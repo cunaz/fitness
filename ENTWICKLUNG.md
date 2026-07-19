@@ -86,23 +86,22 @@ Schritt einzeln und ohne Rückfragen umsetzbar ist.
   (Datenrobustheit, Migration, Cardio, Pläne), Playwright gegen echtes
   Chromium, ~60 Prüfungen.
 
-## Bekannte offene Punkte (klein, kein Blocker)
+## Bekannte offene Punkte
 
-- **K1 Mitternachts-Split:** Eine Einheit über Mitternacht zählt als zwei
-  Trainingstage. Lösungsidee: Tagesgrenze um z. B. 03:00 verschieben
-  (`tagesSchluessel` mit Offset) – als Einstellung, Default unverändert.
-- **K2 Feld-Umbenennung:** Wird ein Einstellungs-Feld umbenannt, findet die
-  Vorbelegung alte Werte nicht mehr (Schlüssel = Feldname). Lösungsidee:
-  beim Speichern des Geräteformulars erkannte Umbenennungen (gleiche
-  Position) in historischen `einst`-Schlüsseln mitziehen – optional per
-  Nachfrage.
-- **K3 Verlauf:** Ganze Tage lassen sich nur satzweise löschen (→ S3).
-- **K4 Kappungen:** `normalisiereDaten` kappt bei 1000 Geräten / 100 000
-  Sätzen, das Schreiben ist unbegrenzt. Praktisch irrelevant; sauber wäre
-  eine Warnung beim Erreichen von 90 % der Grenze.
-- **K5 Alt-Objekte auf GitHub:** Vor dem Public-Stellen ersetzte Commits
-  können bis zur serverseitigen GC per SHA abrufbar sein (Risiko akzeptiert;
-  GitHub-Support-Anfrage möglich).
+- **K1 Mitternachts-Split** – ✅ erledigt (v1.4.0): Einstellung
+  „Tageswechsel fürs Training“ (Mitternacht / 02:00 / 04:00) unter
+  Daten → Einstellungen; `tagesSchluessel()` verschiebt die Tagesgrenze.
+- **K2 Feld-Umbenennung** – ✅ erledigt (v1.4.0): Das Geräteformular
+  erkennt positionsgleiche, beidseitig eindeutige Umbenennungen und zieht
+  sie nach Bestätigung in den historischen `einst`-Schlüsseln mit.
+- **K3 Verlauf: Tag löschen** – ✅ erledigt (v1.4.0): ✕ im Tag-Kopf mit
+  Doppelbestätigung. (Die Verlauf-**Filter** bleiben Schritt S3.)
+- **K4 Kappungs-Warnung** – ✅ erledigt (v1.4.0): Hinweis im Daten-Tab ab
+  über 900 Geräten oder 90 000 Sätzen.
+- **K5 Alt-Objekte auf GitHub** – ⏳ extern, kein Code-Thema: Vor dem
+  Public-Stellen ersetzte Commits können bis zur serverseitigen GC per SHA
+  abrufbar sein. Nur der Repo-Inhaber kann das über eine
+  GitHub-Support-Anfrage beschleunigen; Risiko wurde bewusst akzeptiert.
 
 ## Nächste Schritte (empfohlene Reihenfolge)
 
@@ -146,20 +145,18 @@ Balkenanzahl und Volumen-Text prüfen.
 **Fallstricke:** Zeitraum-Zustand als Modul-Variable → beim Gerätewechsel
 zurücksetzen; `wert()`-Metrik strikt nach `istCardio(geraet)`.
 
-### S3 · Verlauf: Filter + Tag löschen (Aufwand: M)
+### S3 · Verlauf: Filter (Aufwand: S–M)
 
 **Ziel:** Verlauf bei wachsender Historie benutzbar halten.
+(Die Tag-Löschung aus dem ursprünglichen Umfang ist seit v1.4.0 umgesetzt.)
 **Umsetzung:** Oben im Verlauf ein Suchfeld (wiederverwendbares Muster aus
 `renderTraining`) + Filter-Chips für Muskelgruppen (aus vorhandenen
 `gruppe`-Werten der Geräte generieren). Filter wirkt auf die Satz-Ebene
 (Tage ohne Treffer ausblenden); Zähler im Tag-Kopf beziehen sich auf die
-gefilterten Sätze. Zusätzlich pro Tag-Kopf ein ✕ „Tag löschen“ mit
-Doppelbestätigung (Muster: Kaskaden-Löschung im Geräteformular), das alle
-Sätze des Tages entfernt; Scrollposition erhalten (Muster vorhanden).
+gefilterten Sätze.
 **Datenmodell:** unverändert. Filterzustand als Modul-Variable
 (`verlaufFilter`), bei Import/Löschen zurücksetzen.
-**Tests:** e2e: Filter nach Gerätename reduziert sichtbare Chips;
-Tag-Löschung entfernt genau die Sätze des Tages (Log-Länge prüfen).
+**Tests:** e2e: Filter nach Gerätename reduziert sichtbare Chips und Tage.
 
 ### S4 · Wochen-Statistik (Aufwand: M)
 

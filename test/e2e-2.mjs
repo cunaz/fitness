@@ -238,6 +238,62 @@ await seite.waitForFunction(() => document.body.textContent.includes('Oberkörpe
 pruefe((await seite.locator('.geraet-eintrag').first().textContent()).includes('Alt-Presse'),
   'Umschalten auf zweiten Plan: eigene Reihenfolge aktiv');
 
+// --- L) Einstellung "Tageswechsel": Nachteulen-Sätze zählen zum Vortag ---
+await seite.evaluate(() => {
+  localStorage.setItem('gorillalog.einstellungen', JSON.stringify({ pausenTimer: false, tagesgrenze: 4 }));
+  const daten = JSON.parse(localStorage.getItem('gorillalog.v1'));
+  const gid = daten.geraete.find((g) => g.name === 'Alt-Presse').id;
+  const gestern = new Date();
+  gestern.setDate(gestern.getDate() - 1);
+  const frueh = new Date(gestern); frueh.setHours(3, 59, 0, 0);
+  const spaet = new Date(gestern); spaet.setHours(4, 1, 0, 0);
+  daten.log = [
+    { id: 'n1', ts: frueh.getTime(), gid, kg: 20, wdh: 10, einst: {}, max: false, notiz: '' },
+    { id: 'n2', ts: spaet.getTime(), gid, kg: 20, wdh: 10, einst: {}, max: false, notiz: '' },
+  ];
+  localStorage.setItem('gorillalog.v1', JSON.stringify(daten));
+});
+await seite.reload({ waitUntil: 'networkidle' });
+await seite.click('#tabs button[data-route="verlauf"]');
+await seite.waitForSelector('.tag-kopf');
+pruefe((await seite.locator('.tag-kopf').count()) === 2,
+  'Tagesgrenze 04:00: Sätze um 03:59 und 04:01 liegen auf zwei Trainingstagen');
+await seite.evaluate(() => {
+  localStorage.setItem('gorillalog.einstellungen', JSON.stringify({ pausenTimer: false, tagesgrenze: 0 }));
+});
+await seite.reload({ waitUntil: 'networkidle' });
+await seite.waitForSelector('.tag-kopf');
+pruefe((await seite.locator('.tag-kopf').count()) === 1,
+  'Tagesgrenze Mitternacht: beide Sätze am selben Tag');
+
+// --- N) Ganzen Tag im Verlauf löschen ---
+await seite.click('.tag-loeschen');
+await seite.waitForFunction(() => !document.querySelector('.tag-kopf'));
+const logNachTag = await seite.evaluate(() => JSON.parse(localStorage.getItem('gorillalog.v1')).log.length);
+pruefe(logNachTag === 0, 'Tag-Löschung entfernt alle Sätze des Tages (mit Doppelbestätigung)');
+
+// --- M) Feld-Umbenennung zieht historische Werte mit ---
+await seite.evaluate(() => {
+  const daten = JSON.parse(localStorage.getItem('gorillalog.v1'));
+  const g = daten.geraete.find((x) => x.name === 'Alt-Presse');
+  g.felder = ['Sitz'];
+  daten.log = [{ id: 'm1', ts: Date.now() - 86400000, gid: g.id, kg: 30, wdh: 10, einst: { Sitz: '3' }, max: false, notiz: '' }];
+  localStorage.setItem('gorillalog.v1', JSON.stringify(daten));
+});
+await seite.reload({ waitUntil: 'networkidle' });
+await seite.click('#tabs button[data-route="geraete"]');
+await seite.locator('.geraet-eintrag', { hasText: 'Alt-Presse' }).click();
+await seite.waitForSelector('.karte input');
+await seite.locator('.karte input').nth(3).fill('Sitzhöhe');
+await seite.locator('.karte .btn-primaer').click();
+await seite.waitForFunction(() => !document.body.textContent.includes('Gerät bearbeiten:'));
+pruefe(letzterDialog.includes('übernehmen'), 'Umbenennungs-Dialog wurde angezeigt');
+const umbenannt = await seite.evaluate(() => {
+  const log = JSON.parse(localStorage.getItem('gorillalog.v1')).log;
+  return log[0].einst['Sitzhöhe'] === '3' && !('Sitz' in log[0].einst);
+});
+pruefe(umbenannt, 'Feld-Umbenennung: historischer Wert unter neuem Namen verfügbar');
+
 await browser.close();
 console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');
 process.exit(fehler ? 1 : 0);

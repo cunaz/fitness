@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.4.0';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -43,9 +43,18 @@ function el(tag, attrs, ...kinder) {
   return n;
 }
 
+/* Trainingstag-Schlüssel. Über die Einstellung „tagesgrenze“ (Stunden) zählt
+ * Training kurz nach Mitternacht noch zum Vortag (Nachteulen-Einheiten). */
 function tagesSchluessel(ts) {
-  const d = new Date(ts);
+  const versatz = (typeof einstellungen !== 'undefined' && einstellungen.tagesgrenze
+    ? einstellungen.tagesgrenze : 0) * 3600000;
+  const d = new Date(ts - versatz);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function datumVonSchluessel(schluessel) {
+  const [j, m, t] = schluessel.split('-').map(Number);
+  return datumAnzeige(new Date(j, m - 1, t, 12).getTime());
 }
 
 function datumAnzeige(ts) {
@@ -340,9 +349,13 @@ const EINSTELLUNGEN_SCHLUESSEL = 'gorillalog.einstellungen';
 function ladeEinstellungen() {
   try {
     const roh = JSON.parse(localStorage.getItem(EINSTELLUNGEN_SCHLUESSEL) || '{}');
-    return { pausenTimer: roh.pausenTimer === true };
+    const grenze = Number(roh.tagesgrenze);
+    return {
+      pausenTimer: roh.pausenTimer === true,
+      tagesgrenze: Number.isInteger(grenze) && grenze >= 0 && grenze <= 6 ? grenze : 0,
+    };
   } catch {
-    return { pausenTimer: false };
+    return { pausenTimer: false, tagesgrenze: 0 };
   }
 }
 
@@ -903,7 +916,7 @@ function renderVerlauf() {
   }
   const tagesListe = [...tage.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
 
-  for (const [, eintraege] of tagesListe.slice(0, verlaufLimit)) {
+  for (const [schluessel, eintraege] of tagesListe.slice(0, verlaufLimit)) {
     const proGeraet = new Map();
     for (const e of eintraege) {
       if (!proGeraet.has(e.gid)) proGeraet.set(e.gid, []);
@@ -912,9 +925,23 @@ function renderVerlauf() {
 
     ansicht.append(
       el('div', { class: 'tag-kopf' },
-        el('span', { class: 'datum' }, datumAnzeige(eintraege[0].ts)),
+        el('span', { class: 'datum' }, datumVonSchluessel(schluessel)),
         el('span', { class: 'zusammenfassung' },
-          `${eintraege.length} ${eintraege.length === 1 ? 'Satz' : 'Sätze'} · ${proGeraet.size} ${proGeraet.size === 1 ? 'Gerät' : 'Geräte'}`)),
+          `${eintraege.length} ${eintraege.length === 1 ? 'Satz' : 'Sätze'} · ${proGeraet.size} ${proGeraet.size === 1 ? 'Gerät' : 'Geräte'}`),
+        el('button', {
+          type: 'button', class: 'tag-loeschen', 'aria-label': 'Ganzen Tag löschen',
+          onclick: () => {
+            if (!confirm(`Alle ${eintraege.length} Sätze vom ${datumVonSchluessel(schluessel)} löschen?`)) return;
+            if (!confirm('Sicher? Das lässt sich nicht rückgängig machen.')) return;
+            const ids = new Set(eintraege.map((e) => e.id));
+            daten.log = daten.log.filter((e) => !ids.has(e.id));
+            if (bearbeiteSatzId && ids.has(bearbeiteSatzId)) bearbeiteSatzId = null;
+            speichere();
+            const y = window.scrollY;
+            render();
+            window.scrollTo(0, y);
+          },
+        }, '✕')),
     );
 
     const karte = el('div', { class: 'karte' });
@@ -1175,8 +1202,36 @@ function renderGeraetFormular() {
             gruppe: gruppeFeld.value.trim().slice(0, 40),
             felder,
           };
-          if (geraet) Object.assign(geraet, werte);
-          else daten.geraete.push({ id: neuId(), archiviert: false, ...werte });
+          if (geraet) {
+            // Umbenannte Einstellungs-Felder (gleiche Position, beidseitig
+            // eindeutig) in den historischen Einträgen mitziehen, damit die
+            // Vorbelegung die alten Werte weiterhin findet.
+            const alteFelder = geraet.felder;
+            const umbenennungen = [];
+            for (let i = 0; i < Math.min(alteFelder.length, felder.length); i++) {
+              const alt = alteFelder[i];
+              const neuName = felder[i];
+              if (alt !== neuName && !felder.includes(alt) && !alteFelder.includes(neuName)) {
+                umbenennungen.push([alt, neuName]);
+              }
+            }
+            if (umbenennungen.length
+              && confirm(`Feld umbenannt: ${umbenennungen.map(([a, b]) => `„${a}“ → „${b}“`).join(', ')}.\n`
+                + 'Bestehende Einträge auf den neuen Namen übernehmen?')) {
+              for (const e of daten.log) {
+                if (e.gid !== geraet.id) continue;
+                for (const [alt, neuName] of umbenennungen) {
+                  if (Object.prototype.hasOwnProperty.call(e.einst, alt)) {
+                    e.einst[neuName] = e.einst[alt];
+                    delete e.einst[alt];
+                  }
+                }
+              }
+            }
+            Object.assign(geraet, werte);
+          } else {
+            daten.geraete.push({ id: neuId(), archiviert: false, ...werte });
+          }
           speichere();
           bearbeiteId = null;
           render();
@@ -1253,7 +1308,12 @@ function renderDaten() {
       el('tr', null, el('td', null, 'Erster Eintrag'), el('td', null, erster)),
       el('tr', null, el('td', null, 'Speicherbelegung'), el('td', null, belegung)),
       el('tr', null, el('td', null, 'Dauerhafter Speicher'), persistZelle),
-      el('tr', null, el('td', null, 'Version'), el('td', null, APP_VERSION))));
+      el('tr', null, el('td', null, 'Version'), el('td', null, APP_VERSION))),
+    (daten.log.length > 90000 || daten.geraete.length > 900)
+      ? el('p', { class: 'hinweis' },
+        '⚠ Die internen Speichergrenzen (1000 Geräte / 100 000 Sätze) sind fast erreicht – '
+        + 'bitte Backup exportieren und alte Einträge aufräumen.')
+      : null);
 
   // Export: JSON-Datei erzeugen und herunterladen
   const exportKnopf = el('button', {
@@ -1331,13 +1391,27 @@ function renderDaten() {
     speichereEinstellungen();
   });
 
+  const grenzeFeld = el('select', { id: 'einstellung-tagesgrenze' },
+    el('option', { value: '0' }, 'Mitternacht (Standard)'),
+    el('option', { value: '2' }, '02:00 Uhr'),
+    el('option', { value: '4' }, '04:00 Uhr'));
+  grenzeFeld.value = String(einstellungen.tagesgrenze);
+  grenzeFeld.addEventListener('change', () => {
+    einstellungen.tagesgrenze = Number(grenzeFeld.value);
+    speichereEinstellungen();
+  });
+
   ansicht.append(
     el('h2', null, 'Statistik'),
     statKarte,
     el('h2', null, 'Einstellungen'),
     el('div', { class: 'karte' },
       el('label', { class: 'kontrollzeile', for: 'einstellung-pause' },
-        timerFeld, 'Pausen-Timer: nach jedem gespeicherten Satz 90-Sekunden-Countdown anzeigen')),
+        timerFeld, 'Pausen-Timer: nach jedem gespeicherten Satz 90-Sekunden-Countdown anzeigen'),
+      el('label', { for: 'einstellung-tagesgrenze' }, 'Tageswechsel fürs Training'),
+      grenzeFeld,
+      el('p', { class: 'hinweis' },
+        'Für Nachteulen: Sätze vor dieser Uhrzeit zählen noch zum vorherigen Trainingstag.')),
     el('h2', null, 'Backup'),
     el('div', { class: 'karte' },
       el('p', { class: 'hinweis' },

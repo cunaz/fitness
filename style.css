@@ -167,17 +167,20 @@ h2:first-child { margin-top: 4px; }
 label { display: block; font-size: 0.85rem; color: var(--text-dim); margin: 10px 0 4px; }
 
 input[type="text"],
-input[type="number"] {
+input[type="number"],
+select {
   width: 100%;
   padding: 12px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--text);
+  font-family: inherit;
   font-size: 1.05rem;
 }
 
-input:focus { outline: 2px solid var(--akzent); border-color: transparent; }
+input:focus,
+select:focus { outline: 2px solid var(--akzent); border-color: transparent; }
 
 /* Zahlensteller (– Wert +) */
 
@@ -363,13 +366,26 @@ input:focus { outline: 2px solid var(--akzent); border-color: transparent; }
 
 .tag-kopf {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
+  gap: 10px;
   margin: 18px 2px 8px;
 }
 
 .tag-kopf .datum { font-weight: 700; }
-.tag-kopf .zusammenfassung { color: var(--text-dim); font-size: 0.85rem; }
+.tag-kopf .zusammenfassung { color: var(--text-dim); font-size: 0.85rem; margin-left: auto; }
+
+.tag-loeschen {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 10px;
+  margin: -10px -6px -10px 0;
+  cursor: pointer;
+}
+
+.tag-loeschen:active { color: var(--rot); }
 
 .verlauf-geraet { margin-bottom: 10px; }
 
