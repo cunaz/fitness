@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.1.2';
+const APP_VERSION = '1.2.0';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -195,12 +195,17 @@ function normalisiereDaten(roh) {
     }
     const id = typeof e.id === 'string' && e.id.length <= 64 && !logIds.has(e.id) ? e.id : neuId();
     logIds.add(id);
-    log.push({
-      ...unbekannteFelder(e, ['id', 'ts', 'gid', 'kg', 'wdh', 'einst', 'max', 'notiz']),
+    const eintrag = {
+      ...unbekannteFelder(e, ['id', 'ts', 'gid', 'kg', 'wdh', 'einst', 'max', 'notiz', 'dauerMin']),
       id, ts, gid: e.gid, kg, wdh, einst,
       max: e.max === true, // Satz „bis zur Ermüdung“
       notiz: String(e.notiz ?? '').slice(0, 500),
-    });
+    };
+    const dauer = Number(e.dauerMin);
+    if (Number.isFinite(dauer) && dauer > 0 && dauer <= 1440) {
+      eintrag.dauerMin = Math.round(dauer * 10) / 10; // Cardio: Minuten
+    }
+    log.push(eintrag);
   }
   log.sort((a, b) => a.ts - b.ts);
 
@@ -488,7 +493,13 @@ function einstAnzeige(einst) {
   return Object.entries(einst).map(([k, v]) => `${k}: ${v}`).join(' · ');
 }
 
+/* Geräte der Muskelgruppe „Cardio“ erfassen Dauer statt Gewicht × Wiederholungen. */
+function istCardio(geraet) {
+  return geraet.gruppe.trim().toLowerCase() === 'cardio';
+}
+
 function satzText(e) {
+  if (e.dauerMin) return `${e.dauerMin} min${e.max ? ' ⚡' : ''}`;
   return `${kgAnzeige(e.kg)} × ${e.wdh}${e.max ? ' ⚡' : ''}`;
 }
 
@@ -537,7 +548,14 @@ function renderGeraetAnsicht(geraet) {
   const vorlage = satzInBearbeitung
     || [...logVonGeraet(geraet.id)].reverse().find((e) => !e.max)
     || letzterEintrag(geraet.id);
+  const cardio = istCardio(geraet);
   const form = el('div', { class: 'karte' });
+
+  const dauerFeld = el('input', {
+    type: 'number', inputmode: 'decimal', step: '1', min: '1', max: '1440',
+    value: vorlage && vorlage.dauerMin ? String(vorlage.dauerMin) : '10',
+    'aria-label': 'Dauer in Minuten',
+  });
 
   const kgFeld = el('input', {
     type: 'number', inputmode: 'decimal', step: '0.5', min: '0', max: '2000',
@@ -561,6 +579,7 @@ function renderGeraetAnsicht(geraet) {
   const kgStellen = stelle(kgFeld, 2.5, 0, 2000);
   const saetzeStellen = stelle(saetzeFeld, 1, 1, 20);
   const wdhStellen = stelle(wdhFeld, 1, 1, 10000);
+  const dauerStellen = stelle(dauerFeld, 5, 1, 1440);
 
   const einstFelder = new Map();
   const einstEingaben = geraet.felder.map((feldName) => {
@@ -582,25 +601,60 @@ function renderGeraetAnsicht(geraet) {
 
   const knopfText = () => {
     if (satzInBearbeitung) return 'Änderungen speichern';
+    if (cardio) return 'Eintrag speichern';
     const n = zahlLesen(saetzeFeld.value);
     return Number.isInteger(n) && n > 1 ? `${n} Sätze speichern` : 'Satz speichern';
   };
   speichernKnopf.textContent = knopfText();
   saetzeFeld.addEventListener('input', () => { speichernKnopf.textContent = knopfText(); });
 
+  const zeigeErfolg = (text) => {
+    if (speichere()) {
+      if (navigator.vibrate) navigator.vibrate(40);
+      speichernKnopf.replaceChildren(el('span', { class: 'ok-blitz' }, text));
+      if (einstellungen.pausenTimer) startePause(90);
+    } else {
+      // Einträge bleiben im Arbeitsspeicher (Export weiterhin möglich), aber
+      // kein falsches Erfolgssignal zeigen.
+      speichernKnopf.replaceChildren('⚠ nicht gespeichert');
+    }
+    setTimeout(() => speichernKnopf.replaceChildren(knopfText()), 1400);
+    renderHeuteSaetze(heuteBereich, geraet);
+  };
+
   speichernKnopf.addEventListener('click', () => {
-    const kg = zahlLesen(kgFeld.value);
-    const saetze = satzInBearbeitung ? 1 : zahlLesen(saetzeFeld.value);
-    const wdh = zahlLesen(wdhFeld.value);
-    if (!Number.isFinite(kg) || kg < 0 || kg > 2000) { alert('Bitte ein gültiges Gewicht (0–2000 kg) eingeben.'); return; }
-    if (!Number.isInteger(saetze) || saetze < 1 || saetze > 20) { alert('Bitte eine gültige Satz-Anzahl (1–20) eingeben.'); return; }
-    if (!Number.isInteger(wdh) || wdh < 1 || wdh > 10000) { alert('Bitte gültige Wiederholungen (ganze Zahl ab 1) eingeben.'); return; }
     const einst = {};
     for (const [feldName, eingabe] of einstFelder) {
       const wert = eingabe.value.trim().slice(0, 60);
       if (wert) einst[feldName] = wert;
     }
     const notiz = notizFeld.value.trim().slice(0, 500);
+
+    if (cardio) {
+      const dauer = zahlLesen(dauerFeld.value);
+      if (!Number.isFinite(dauer) || dauer <= 0 || dauer > 1440) { alert('Bitte eine gültige Dauer (1–1440 Minuten) eingeben.'); return; }
+      const dauerMin = Math.round(dauer * 10) / 10;
+      if (satzInBearbeitung) {
+        Object.assign(satzInBearbeitung, { dauerMin, einst: { ...einst }, notiz });
+        speichere();
+        bearbeiteSatzId = null;
+        render();
+        return;
+      }
+      daten.log.push({
+        id: neuId(), ts: Date.now(), gid: geraet.id,
+        kg: 0, wdh: 1, dauerMin, einst: { ...einst }, max: false, notiz,
+      });
+      zeigeErfolg('✓ gespeichert');
+      return;
+    }
+
+    const kg = zahlLesen(kgFeld.value);
+    const saetze = satzInBearbeitung ? 1 : zahlLesen(saetzeFeld.value);
+    const wdh = zahlLesen(wdhFeld.value);
+    if (!Number.isFinite(kg) || kg < 0 || kg > 2000) { alert('Bitte ein gültiges Gewicht (0–2000 kg) eingeben.'); return; }
+    if (!Number.isInteger(saetze) || saetze < 1 || saetze > 20) { alert('Bitte eine gültige Satz-Anzahl (1–20) eingeben.'); return; }
+    if (!Number.isInteger(wdh) || wdh < 1 || wdh > 10000) { alert('Bitte gültige Wiederholungen (ganze Zahl ab 1) eingeben.'); return; }
 
     if (satzInBearbeitung) {
       // Korrektur: bestehenden Satz aktualisieren, Zeitstempel bleibt
@@ -622,42 +676,39 @@ function renderGeraetAnsicht(geraet) {
         max: maxFeld.checked, notiz,
       });
     }
-    if (speichere()) {
-      if (navigator.vibrate) navigator.vibrate(40);
-      speichernKnopf.replaceChildren(el('span', { class: 'ok-blitz' },
-        saetze > 1 ? `✓ ${saetze} Sätze gespeichert` : '✓ gespeichert'));
-      if (einstellungen.pausenTimer) startePause(90);
-    } else {
-      // Einträge bleiben im Arbeitsspeicher (Export weiterhin möglich), aber
-      // kein falsches Erfolgssignal zeigen.
-      speichernKnopf.replaceChildren('⚠ nicht gespeichert');
-    }
-    setTimeout(() => speichernKnopf.replaceChildren(knopfText()), 1400);
-    renderHeuteSaetze(heuteBereich, geraet);
+    zeigeErfolg(saetze > 1 ? `✓ ${saetze} Sätze gespeichert` : '✓ gespeichert');
   });
 
   form.append(
     ...(satzInBearbeitung ? [el('div', { class: 'geraet-meta' },
       `Korrigieren: Satz vom ${datumAnzeige(satzInBearbeitung.ts)} (${satzText(satzInBearbeitung)})`)] : []),
-    el('label', null, 'Gewicht (kg)'),
-    el('div', { class: 'steller' },
-      el('button', { type: 'button', 'aria-label': 'Gewicht verringern', onclick: () => kgStellen(-1) }, '−'),
-      kgFeld,
-      el('button', { type: 'button', 'aria-label': 'Gewicht erhöhen', onclick: () => kgStellen(1) }, '+')),
-    ...(satzInBearbeitung ? [] : [
-      el('label', null, 'Sätze'),
+    ...(cardio ? [
+      el('label', null, 'Dauer (Minuten)'),
       el('div', { class: 'steller' },
-        el('button', { type: 'button', 'aria-label': 'Sätze verringern', onclick: () => saetzeStellen(-1) }, '−'),
-        saetzeFeld,
-        el('button', { type: 'button', 'aria-label': 'Sätze erhöhen', onclick: () => saetzeStellen(1) }, '+')),
+        el('button', { type: 'button', 'aria-label': 'Dauer verringern', onclick: () => dauerStellen(-1) }, '−'),
+        dauerFeld,
+        el('button', { type: 'button', 'aria-label': 'Dauer erhöhen', onclick: () => dauerStellen(1) }, '+')),
+    ] : [
+      el('label', null, 'Gewicht (kg)'),
+      el('div', { class: 'steller' },
+        el('button', { type: 'button', 'aria-label': 'Gewicht verringern', onclick: () => kgStellen(-1) }, '−'),
+        kgFeld,
+        el('button', { type: 'button', 'aria-label': 'Gewicht erhöhen', onclick: () => kgStellen(1) }, '+')),
+      ...(satzInBearbeitung ? [] : [
+        el('label', null, 'Sätze'),
+        el('div', { class: 'steller' },
+          el('button', { type: 'button', 'aria-label': 'Sätze verringern', onclick: () => saetzeStellen(-1) }, '−'),
+          saetzeFeld,
+          el('button', { type: 'button', 'aria-label': 'Sätze erhöhen', onclick: () => saetzeStellen(1) }, '+')),
+      ]),
+      el('label', null, satzInBearbeitung ? 'Wiederholungen' : 'Wiederholungen (pro Satz)'),
+      el('div', { class: 'steller' },
+        el('button', { type: 'button', 'aria-label': 'Wiederholungen verringern', onclick: () => wdhStellen(-1) }, '−'),
+        wdhFeld,
+        el('button', { type: 'button', 'aria-label': 'Wiederholungen erhöhen', onclick: () => wdhStellen(1) }, '+')),
+      el('label', { class: 'kontrollzeile', for: 'max-satz' },
+        maxFeld, 'Bis zur Ermüdung (Max-Satz) ⚡'),
     ]),
-    el('label', null, satzInBearbeitung ? 'Wiederholungen' : 'Wiederholungen (pro Satz)'),
-    el('div', { class: 'steller' },
-      el('button', { type: 'button', 'aria-label': 'Wiederholungen verringern', onclick: () => wdhStellen(-1) }, '−'),
-      wdhFeld,
-      el('button', { type: 'button', 'aria-label': 'Wiederholungen erhöhen', onclick: () => wdhStellen(1) }, '+')),
-    el('label', { class: 'kontrollzeile', for: 'max-satz' },
-      maxFeld, 'Bis zur Ermüdung (Max-Satz) ⚡'),
     ...einstEingaben.flat(),
     el('label', null, 'Notiz'),
     notizFeld,
@@ -691,7 +742,7 @@ function renderHeuteSaetze(container, geraet) {
           type: 'button', class: 'loeschen', 'aria-label': 'Satz löschen',
           onclick: (ev) => {
             ev.stopPropagation();
-            if (!confirm(`Satz ${i + 1} (${kgAnzeige(e.kg)} × ${e.wdh}) löschen?`)) return;
+            if (!confirm(`Satz ${i + 1} (${satzText(e)}) löschen?`)) return;
             daten.log = daten.log.filter((x) => x.id !== e.id);
             if (bearbeiteSatzId === e.id) bearbeiteSatzId = null;
             speichere();
@@ -701,22 +752,24 @@ function renderHeuteSaetze(container, geraet) {
   );
 }
 
-/* Entwicklung des Top-Satzes (höchstes Gewicht pro Trainingstag) */
+/* Entwicklung des Top-Satzes pro Trainingstag (Kraft: höchstes Gewicht,
+ * Cardio: längste Dauer) */
 function renderFortschritt(geraet) {
+  const wert = (e) => (e.dauerMin ? e.dauerMin : e.kg);
   const proTag = new Map();
   for (const e of logVonGeraet(geraet.id)) {
     const tag = tagesSchluessel(e.ts);
     const bisher = proTag.get(tag);
-    if (!bisher || e.kg > bisher.kg) proTag.set(tag, e);
+    if (!bisher || wert(e) > wert(bisher)) proTag.set(tag, e);
   }
   const tage = [...proTag.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(-12);
   if (tage.length < 2) return null;
-  const maxKg = Math.max(1, ...tage.map(([, e]) => e.kg));
+  const maxWert = Math.max(1, ...tage.map(([, e]) => wert(e)));
   const karte = el('div', { class: 'karte' },
     el('div', { class: 'geraet-meta' }, `Fortschritt · Top-Satz der letzten ${tage.length} Einheiten`));
   for (const [, e] of tage) {
     const balken = el('span', { class: `fortschritt-balken${e.max ? ' max' : ''}` });
-    balken.style.width = `${Math.max(4, Math.round((e.kg / maxKg) * 100))}%`;
+    balken.style.width = `${Math.max(4, Math.round((wert(e) / maxWert) * 100))}%`;
     karte.append(el('div', { class: 'fortschritt-zeile' },
       el('span', { class: 'fortschritt-datum' },
         new Date(e.ts).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })),
@@ -785,7 +838,7 @@ function renderVerlauf() {
               type: 'button', class: 'loeschen', 'aria-label': 'Satz löschen',
               onclick: (ev) => {
                 ev.stopPropagation();
-                if (!confirm(`Satz (${kgAnzeige(e.kg)} × ${e.wdh}) vom ${datumAnzeige(e.ts)} löschen?`)) return;
+                if (!confirm(`Satz (${satzText(e)}) vom ${datumAnzeige(e.ts)} löschen?`)) return;
                 daten.log = daten.log.filter((x) => x.id !== e.id);
                 if (bearbeiteSatzId === e.id) bearbeiteSatzId = null;
                 speichere();

@@ -92,7 +92,8 @@ pruefe((await seite.locator('.geraet-eintrag').count()) === 12, 'Defekter Speich
 const gerettet = await seite.evaluate(() => localStorage.getItem('gorillalog.v1.defekt'));
 pruefe(gerettet === '{kaputt###', 'Defekte Daten wurden zur Rettung beiseitegelegt');
 
-// --- D) Ungültige Eingaben werden abgelehnt ---
+// --- D) Ungültige Eingaben werden abgelehnt (Kraftgerät: Beinpresse #15) ---
+await seite.fill('.suche', '15');
 await seite.click('.geraet-eintrag');
 await seite.waitForSelector('.geraet-kopf');
 await seite.locator('.steller input').nth(2).fill('0');
@@ -178,6 +179,30 @@ await seite.waitForFunction(() => {
 pruefe(true, 'Pausen-Timer erscheint nach Aktivierung unter Daten → Einstellungen');
 await seite.click('.pause-banner button[aria-label="Pause ausblenden"]');
 pruefe(await seite.locator('.pause-banner').isHidden(), 'Pausen-Timer lässt sich ausblenden');
+
+// --- I) Cardio-Geräte erfassen Minuten statt Gewicht/Sätze/Wiederholungen ---
+await seite.click('#tabs button[data-route="geraete"]');
+await seite.click('button:has-text("Fehlende Standard-Geräte ergänzen")');
+await seite.click('#tabs button[data-route=""]');
+await seite.waitForSelector('.suche');
+await seite.fill('.suche', 'fahrrad');
+await seite.click('.geraet-eintrag');
+await seite.waitForSelector('.geraet-kopf');
+pruefe((await seite.locator('#view').textContent()).includes('Dauer (Minuten)'), 'Cardio-Formular zeigt Dauer-Feld');
+pruefe((await seite.locator('.steller input').count()) === 1, 'Kein Gewicht/Sätze/Wdh-Steller bei Cardio');
+pruefe((await seite.locator('#max-satz').count()) === 0, 'Kein Max-Satz-Haken bei Cardio');
+await seite.locator('.steller input').fill('30');
+await seite.locator('.karte input[type="text"]').first().fill('8'); // Einstellung "Stufe"
+await seite.click('.btn-primaer');
+await seite.waitForSelector('.satz-chip');
+const cardioChip = await seite.locator('.satz-chip').first().textContent();
+pruefe(cardioChip.includes('30 min'), `Cardio-Eintrag als Minuten angezeigt (${cardioChip.trim()})`);
+const cardioDaten = await seite.evaluate(() => {
+  const log = JSON.parse(localStorage.getItem('gorillalog.v1')).log;
+  const e = log[log.length - 1];
+  return e.dauerMin === 30 && e.kg === 0 && e.einst.Stufe === '8';
+});
+pruefe(cardioDaten, 'Cardio-Eintrag gespeichert (dauerMin 30, Stufe 8)');
 
 await browser.close();
 console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');

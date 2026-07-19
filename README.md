@@ -33,6 +33,8 @@ Gerät. Der Code besteht aus reinem HTML/CSS/JavaScript ohne einzige Abhängigke
   durch die Einheit.
 - **Pausen-Timer (optional):** Auf Wunsch startet nach jedem gespeicherten
   Satz ein 90-Sekunden-Countdown mit Vibration (unter „Daten“ aktivierbar).
+- **Cardio:** Geräte mit Muskelgruppe „Cardio“ (Laufband, Fahrrad, Einwärmen)
+  erfassen die Dauer in Minuten statt Gewicht, Sätze und Wiederholungen.
 - **Geräte-Einstellungen merken:** Pro Gerät frei definierbare Felder wie
   Sitzhöhe oder Rückenlehne – nie wieder die richtige Stufe suchen.
 - **Verlauf:** Alle Trainingstage chronologisch, pro Gerät gruppiert.
