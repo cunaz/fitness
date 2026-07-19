@@ -28,9 +28,9 @@ Gerät. Der Code besteht aus reinem HTML/CSS/JavaScript ohne einzige Abhängigke
   Werte ändern, speichern – kein Löschen und Neu-Eintippen nötig.
 - **Fortschritt:** Pro Gerät die Entwicklung des Top-Satzes über die letzten
   Einheiten als Balkenübersicht.
-- **Trainingsplan:** Geräte mit Plan-Position erscheinen im Training-Tab in
-  Plan-Reihenfolge; Erledigtes wird grün abgehakt und „Als Nächstes“ führt
-  durch die Einheit.
+- **Trainingspläne:** Mehrere benannte Pläne (z. B. Ganzkörper, Push, Pull)
+  mit je eigener Geräte-Reihenfolge; im Training-Tab per Tipp umschaltbar.
+  Erledigtes wird grün abgehakt und „Als Nächstes“ führt durch die Einheit.
 - **Pausen-Timer (optional):** Auf Wunsch startet nach jedem gespeicherten
   Satz ein 90-Sekunden-Countdown mit Vibration (unter „Daten“ aktivierbar).
 - **Cardio:** Geräte mit Muskelgruppe „Cardio“ (Laufband, Fahrrad, Einwärmen)

@@ -205,6 +205,39 @@ const cardioDaten = await seite.evaluate(() => {
 });
 pruefe(cardioDaten, 'Cardio-Eintrag gespeichert (dauerMin 30, distanzKm 12.5, Stufe 8)');
 
+// --- J) Migration v1 → v2: Plan-Positionen werden zu "Plan A" ---
+await seite.evaluate(() => {
+  localStorage.setItem('gorillalog.v1', JSON.stringify({
+    version: 1,
+    geraete: [
+      { id: 'a1', nr: '1', name: 'Alt-Presse', gruppe: 'Brust', felder: [], archiviert: false, plan: 2 },
+      { id: 'a2', nr: '2', name: 'Alt-Zug', gruppe: 'Rücken', felder: [], archiviert: false, plan: 1 },
+    ],
+    log: [],
+  }));
+});
+await seite.goto(BASIS, { waitUntil: 'networkidle' });
+const migriertText = await seite.locator('#view').textContent();
+pruefe(migriertText.includes('Plan A heute: 0 von 2'), 'v1-Daten migriert: Plan-Positionen wurden zu "Plan A"');
+pruefe((await seite.locator('.geraet-eintrag').first().textContent()).includes('Alt-Zug'),
+  'Plan-Reihenfolge nach Migration korrekt (Position 1 zuerst)');
+
+// --- K) Mehrere Pläne: anlegen und umschalten ---
+await seite.click('#tabs button[data-route="geraete"]');
+await seite.click('button:has-text("+ Neuer Plan")');
+await seite.waitForSelector('.karte input[type="text"]');
+await seite.locator('.karte input[type="text"]').first().fill('Oberkörper');
+await seite.locator('.karte .plan-zeile input').first().fill('1'); // Alt-Presse (#1)
+await seite.locator('.karte .btn-primaer').click();
+await seite.waitForFunction(() => document.body.textContent.includes('Oberkörper'));
+await seite.click('#tabs button[data-route=""]');
+await seite.waitForSelector('.plan-chip');
+pruefe((await seite.locator('.plan-chip').count()) === 2, 'Plan-Umschalter zeigt beide Pläne');
+await seite.locator('.plan-chip', { hasText: 'Oberkörper' }).click();
+await seite.waitForFunction(() => document.body.textContent.includes('Oberkörper heute: 0 von 1'));
+pruefe((await seite.locator('.geraet-eintrag').first().textContent()).includes('Alt-Presse'),
+  'Umschalten auf zweiten Plan: eigene Reihenfolge aktiv');
+
 await browser.close();
 console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');
 process.exit(fehler ? 1 : 0);

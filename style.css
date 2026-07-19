@@ -137,6 +137,12 @@ h2:first-child { margin-top: 4px; }
 }
 
 .nr-badge.erledigt { background: var(--gruen); }
+.nr-badge.inaktiv { background: var(--bg-card-2); color: var(--text-dim); }
+
+/* Plan-Editor: Geräte-Zeile mit Positions-Feld */
+.plan-zeile { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.plan-zeile-name { flex: 1 1 auto; font-size: 0.92rem; }
+.plan-zeile input { flex: 0 0 76px; width: 76px; text-align: center; padding: 8px; }
 
 .geraet-info { flex: 1 1 auto; min-width: 0; }
 
@@ -252,8 +258,15 @@ input:focus { outline: 2px solid var(--akzent); border-color: transparent; }
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 6px 12px;
+  color: var(--text);
   font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
+}
+
+.plan-chip.aktiv {
+  border-color: var(--akzent);
+  color: var(--akzent);
+  font-weight: 700;
 }
 
 .satz-chip .loeschen {

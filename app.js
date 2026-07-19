@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.3.0';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -79,24 +79,37 @@ function zahlLesen(wert) {
  * „Geräte“ jederzeit anpassen; Übungen ohne Nummer stehen am Listenende. */
 
 function standardGeraete() {
-  // [Nr, Name, Muskelgruppe, Einstellungs-Felder, Plan-Position]
+  // [Nr, Name, Muskelgruppe, Einstellungs-Felder]
   const liste = [
-    ['', 'Einwärmen', 'Cardio', [], 1],
-    ['15', 'Beinpresse', 'Beine', [], 2],
-    ['14', 'Beinbeuger', 'Beine', ['Einstellung'], 3],
-    ['25', 'Latzug', 'Rücken', ['Einstellung'], 4],
-    ['24', 'Reverse Butterfly', 'Schultern', ['Einstellung'], 5],
-    ['24', 'Butterfly', 'Brust', ['Einstellung'], 6],
-    ['23', 'Brustpresse', 'Brust', ['Einstellung'], 7],
-    ['', 'Freemotion Bizepscurl', 'Arme', [], 8],
-    ['', 'Rotatoren Gummiband (rot)', 'Schultern', [], 9],
-    ['37', 'Trizepsdrücken', 'Arme', [], 10],
-    ['', 'Laufband', 'Cardio', ['Tempo', 'Steigung'], null],
-    ['', 'Fahrrad', 'Cardio', ['Stufe'], null],
+    ['', 'Einwärmen', 'Cardio', []],
+    ['15', 'Beinpresse', 'Beine', []],
+    ['14', 'Beinbeuger', 'Beine', ['Einstellung']],
+    ['25', 'Latzug', 'Rücken', ['Einstellung']],
+    ['24', 'Reverse Butterfly', 'Schultern', ['Einstellung']],
+    ['24', 'Butterfly', 'Brust', ['Einstellung']],
+    ['23', 'Brustpresse', 'Brust', ['Einstellung']],
+    ['', 'Freemotion Bizepscurl', 'Arme', []],
+    ['', 'Rotatoren Gummiband (rot)', 'Schultern', []],
+    ['37', 'Trizepsdrücken', 'Arme', []],
+    ['', 'Laufband', 'Cardio', ['Tempo', 'Steigung']],
+    ['', 'Fahrrad', 'Cardio', ['Stufe']],
   ];
-  return liste.map(([nr, name, gruppe, felder, plan]) => ({
-    id: neuId(), nr, name, gruppe, felder, archiviert: false, plan,
+  return liste.map(([nr, name, gruppe, felder]) => ({
+    id: neuId(), nr, name, gruppe, felder, archiviert: false,
   }));
+}
+
+/* Frischer Datenbestand: Standardkatalog plus ein Ganzkörper-Plan. */
+function standardDaten() {
+  const geraete = standardGeraete();
+  const idVonName = new Map(geraete.map((g) => [g.name, g.id]));
+  const reihenfolge = ['Einwärmen', 'Beinpresse', 'Beinbeuger', 'Latzug', 'Reverse Butterfly',
+    'Butterfly', 'Brustpresse', 'Freemotion Bizepscurl', 'Rotatoren Gummiband (rot)', 'Trizepsdrücken'];
+  const plan = {
+    id: neuId(), name: 'Ganzkörper',
+    geraete: reihenfolge.map((n) => idVonName.get(n)).filter(Boolean),
+  };
+  return { version: DATEN_VERSION, geraete, plaene: [plan], aktiverPlanId: plan.id, log: [] };
 }
 
 /* ============================== Datenhaltung ============================== */
@@ -106,10 +119,30 @@ function standardGeraete() {
  * Stufe ergänzt, die alte Datenstände automatisch anhebt. Alte Backups und
  * localStorage-Stände bleiben so dauerhaft verwendbar – niemals eine
  * Migrationsstufe entfernen. */
-const DATEN_VERSION = 1;
+const DATEN_VERSION = 2;
 const MIGRATIONEN = {
-  // Beispiel für die Zukunft:
-  // 1: (d) => ({ ...d, version: 2, geraete: d.geraete.map(...) }),
+  // v1 → v2: Aus den Plan-Positionen der Geräte werden benannte Trainingspläne.
+  1: (d) => {
+    const geraete = Array.isArray(d.geraete) ? d.geraete : [];
+    const imPlan = geraete
+      .filter((g) => g && typeof g === 'object' && typeof g.id === 'string'
+        && g.plan !== null && g.plan !== undefined && Number.isFinite(Number(g.plan)))
+      .sort((a, b) => Number(a.plan) - Number(b.plan));
+    const plaene = imPlan.length
+      ? [{ id: neuId(), name: 'Plan A', geraete: imPlan.map((g) => g.id) }]
+      : [];
+    return {
+      ...d,
+      version: 2,
+      geraete: geraete.map((g) => {
+        if (!g || typeof g !== 'object') return g;
+        const { plan, ...rest } = g;
+        return rest;
+      }),
+      plaene,
+      aktiverPlanId: plaene.length ? plaene[0].id : null,
+    };
+  },
 };
 
 function migriereAlteVersionen(quelle) {
@@ -158,7 +191,6 @@ function normalisiereDaten(roh) {
       ? [...new Set(g.felder.slice(0, 10).map((f) => String(f).slice(0, 40).trim())
           .filter((f) => f && !RESERVIERTE_NAMEN.has(f)))]
       : [];
-    const planRoh = Number(g.plan);
     geraete.push({
       ...unbekannteFelder(g, ['id', 'nr', 'name', 'gruppe', 'felder', 'archiviert', 'plan']),
       id,
@@ -167,10 +199,31 @@ function normalisiereDaten(roh) {
       gruppe: String(g.gruppe ?? '').slice(0, 40).trim(),
       felder,
       archiviert: g.archiviert === true,
-      // Position im Trainingsplan (optional): bestimmt die Reihenfolge im Training-Tab
-      plan: Number.isFinite(planRoh) && planRoh >= 1 && planRoh <= 999 ? Math.round(planRoh) : null,
     });
   }
+
+  // Trainingspläne: benannte, geordnete Geräte-Listen
+  const plaene = [];
+  const planIds = new Set();
+  if (Array.isArray(quelle.plaene)) {
+    for (const p of quelle.plaene.slice(0, 20)) {
+      if (!p || typeof p !== 'object') continue;
+      const planName = String(p.name ?? '').slice(0, 60).trim();
+      if (!planName) continue;
+      const pid = typeof p.id === 'string' && p.id.length <= 64 && !planIds.has(p.id) ? p.id : neuId();
+      planIds.add(pid);
+      const gids = Array.isArray(p.geraete)
+        ? [...new Set(p.geraete.filter((gid) => typeof gid === 'string' && bekannteIds.has(gid)))].slice(0, 200)
+        : [];
+      plaene.push({
+        ...unbekannteFelder(p, ['id', 'name', 'geraete']),
+        id: pid, name: planName, geraete: gids,
+      });
+    }
+  }
+  const aktiverPlanId = typeof quelle.aktiverPlanId === 'string' && plaene.some((p) => p.id === quelle.aktiverPlanId)
+    ? quelle.aktiverPlanId
+    : (plaene.length ? plaene[0].id : null);
 
   const log = [];
   const logIds = new Set();
@@ -214,9 +267,11 @@ function normalisiereDaten(roh) {
   log.sort((a, b) => a.ts - b.ts);
 
   return {
-    ...unbekannteFelder(quelle, ['version', 'geraete', 'log']),
+    ...unbekannteFelder(quelle, ['version', 'geraete', 'log', 'plaene', 'aktiverPlanId']),
     version: DATEN_VERSION,
     geraete,
+    plaene,
+    aktiverPlanId,
     log,
   };
 }
@@ -256,7 +311,7 @@ function ladeDaten() {
     sichereDefekt(roh);
     try { localStorage.removeItem(SPEICHER_SCHLUESSEL); } catch { /* nicht schreibbar */ }
   }
-  return { version: DATEN_VERSION, geraete: standardGeraete(), log: [] };
+  return standardDaten();
 }
 
 let daten = ladeDaten();
@@ -324,12 +379,18 @@ function geraeteSortiert() {
   return [...daten.geraete].sort(vergleicheNr);
 }
 
-/* Für den Training-Tab: Geräte mit Plan-Position zuerst (in Plan-Reihenfolge),
+function aktiverPlan() {
+  return daten.plaene.find((p) => p.id === daten.aktiverPlanId) || null;
+}
+
+/* Für den Training-Tab: Geräte des aktiven Plans zuerst (in Plan-Reihenfolge),
  * der Rest nach Nummer. */
 function planSortiert() {
+  const plan = aktiverPlan();
+  const position = new Map(plan ? plan.geraete.map((gid, i) => [gid, i]) : []);
   return [...daten.geraete].sort((a, b) => {
-    const pa = a.plan ?? Infinity;
-    const pb = b.plan ?? Infinity;
+    const pa = position.has(a.id) ? position.get(a.id) : Infinity;
+    const pb = position.has(b.id) ? position.get(b.id) : Infinity;
     if (pa !== pb) return pa - pb;
     return vergleicheNr(a, b);
   });
@@ -408,16 +469,31 @@ function render() {
 function renderTraining() {
   const heute = tagesSchluessel(Date.now());
   const saetzeDesTages = daten.log.filter((e) => tagesSchluessel(e.ts) === heute);
-  const planGeraete = daten.geraete
-    .filter((g) => !g.archiviert && g.plan !== null && g.plan !== undefined)
-    .sort((a, b) => a.plan - b.plan);
+  const plan = aktiverPlan();
+  const planGeraete = plan
+    ? plan.geraete.map(geraetVonId).filter((g) => g && !g.archiviert)
+    : [];
 
   const kopfKarte = el('div', { class: 'karte' });
 
-  if (planGeraete.length) {
+  // Plan-Umschalter, sobald es mehrere Pläne gibt
+  if (daten.plaene.length > 1) {
+    kopfKarte.append(el('div', { class: 'satz-chips' },
+      daten.plaene.map((p) => el('button', {
+        type: 'button',
+        class: `satz-chip tippbar plan-chip${p.id === daten.aktiverPlanId ? ' aktiv' : ''}`,
+        onclick: () => {
+          daten.aktiverPlanId = p.id;
+          speichere();
+          render();
+        },
+      }, p.name))));
+  }
+
+  if (plan && planGeraete.length) {
     const offen = planGeraete.filter((g) => !saetzeHeute(g.id).length);
-    kopfKarte.append(el('div', null,
-      `Trainingsplan heute: ${planGeraete.length - offen.length} von ${planGeraete.length} erledigt`));
+    kopfKarte.append(el('div', { class: daten.plaene.length > 1 ? 'heute-zeile' : undefined },
+      `${plan.name} heute: ${planGeraete.length - offen.length} von ${planGeraete.length} erledigt`));
     if (offen.length) {
       const naechstes = offen[0];
       kopfKarte.append(el('button', {
@@ -913,7 +989,116 @@ function ergaenzeStandardGeraete() {
   alert(`${neue.length} ${neue.length === 1 ? 'Gerät' : 'Geräte'} ergänzt: ${neue.map((g) => g.name).join(', ')}`);
 }
 
+let bearbeitePlanId = null; // null = kein Plan-Formular, '' = neuer Plan, sonst Plan-ID
+
+function renderPlanVerwaltung() {
+  const bereich = el('div', null, el('h2', null, 'Trainingspläne'));
+  if (daten.plaene.length) {
+    bereich.append(el('div', { class: 'geraet-liste' },
+      daten.plaene.map((p) => el('button', {
+        type: 'button', class: 'geraet-eintrag',
+        onclick: () => { bearbeitePlanId = p.id; render(); },
+      },
+      el('span', { class: `nr-badge${p.id === daten.aktiverPlanId ? '' : ' inaktiv'}` },
+        p.id === daten.aktiverPlanId ? '★' : '☆'),
+      el('span', { class: 'geraet-info' },
+        el('div', { class: 'geraet-name' }, p.name),
+        el('div', { class: 'geraet-meta' },
+          `${p.geraete.length} Geräte${p.id === daten.aktiverPlanId ? ' · aktiv' : ''}`)),
+      el('span', { class: 'geraet-zuletzt' }, '✎')))));
+  }
+  bereich.append(el('button', {
+    type: 'button', class: 'btn',
+    onclick: () => { bearbeitePlanId = ''; render(); },
+  }, '+ Neuer Plan'));
+  if (bearbeitePlanId !== null) bereich.append(renderPlanFormular());
+  return bereich;
+}
+
+function renderPlanFormular() {
+  const plan = bearbeitePlanId ? daten.plaene.find((p) => p.id === bearbeitePlanId) : null;
+  const positionVon = new Map(plan ? plan.geraete.map((gid, i) => [gid, i + 1]) : []);
+  const nameFeld = el('input', { type: 'text', maxlength: '60', value: plan ? plan.name : '' });
+  const posFelder = new Map();
+  const zeilen = geraeteSortiert().filter((g) => !g.archiviert).map((g) => {
+    const feld = el('input', {
+      type: 'number', inputmode: 'numeric', min: '1', max: '999', placeholder: '–',
+      value: positionVon.has(g.id) ? String(positionVon.get(g.id)) : '',
+      'aria-label': `Position von ${g.name}`,
+    });
+    posFelder.set(g.id, feld);
+    return el('div', { class: 'plan-zeile' },
+      el('span', { class: 'plan-zeile-name' }, `${g.nr ? `#${g.nr} ` : ''}${g.name}`),
+      feld);
+  });
+
+  const form = el('div', { class: 'karte' },
+    el('h2', null, plan ? `Plan bearbeiten: ${plan.name}` : 'Neuer Plan'),
+    el('label', null, 'Name'), nameFeld,
+    el('p', { class: 'hinweis' }, 'Reihenfolge-Nummer eintragen; leer = Gerät gehört nicht zu diesem Plan.'),
+    zeilen,
+    el('div', { class: 'btn-reihe' },
+      el('button', {
+        type: 'button', class: 'btn btn-primaer',
+        onclick: () => {
+          const name = nameFeld.value.trim().slice(0, 60);
+          if (!name) { alert('Bitte einen Namen eingeben.'); return; }
+          const eintraege = [];
+          for (const [gid, feld] of posFelder) {
+            const wert = Math.round(zahlLesen(feld.value));
+            if (Number.isFinite(wert) && wert >= 1) eintraege.push([wert, gid]);
+          }
+          eintraege.sort((a, b) => a[0] - b[0]);
+          const gids = eintraege.map(([, gid]) => gid);
+          if (plan) {
+            plan.name = name;
+            plan.geraete = gids;
+          } else {
+            const neu = { id: neuId(), name, geraete: gids };
+            daten.plaene.push(neu);
+            if (!daten.aktiverPlanId) daten.aktiverPlanId = neu.id;
+          }
+          speichere();
+          bearbeitePlanId = null;
+          render();
+        },
+      }, 'Speichern'),
+      el('button', {
+        type: 'button', class: 'btn',
+        onclick: () => { bearbeitePlanId = null; render(); },
+      }, 'Abbrechen')),
+  );
+
+  if (plan) {
+    form.append(el('div', { class: 'btn-reihe' },
+      el('button', {
+        type: 'button', class: 'btn',
+        onclick: () => {
+          daten.aktiverPlanId = plan.id;
+          speichere();
+          render();
+        },
+      }, plan.id === daten.aktiverPlanId ? '★ Aktiver Plan' : 'Als aktiv setzen'),
+      el('button', {
+        type: 'button', class: 'btn btn-gefahr',
+        onclick: () => {
+          if (!confirm(`Plan „${plan.name}“ löschen? Geräte und Trainingsverlauf bleiben erhalten.`)) return;
+          daten.plaene = daten.plaene.filter((p) => p.id !== plan.id);
+          if (daten.aktiverPlanId === plan.id) {
+            daten.aktiverPlanId = daten.plaene.length ? daten.plaene[0].id : null;
+          }
+          speichere();
+          bearbeitePlanId = null;
+          render();
+        },
+      }, 'Löschen')));
+  }
+
+  return form;
+}
+
 function renderGeraeteVerwaltung() {
+  ansicht.append(renderPlanVerwaltung(), el('h2', null, 'Geräte'));
   ansicht.append(
     el('button', {
       type: 'button', class: 'btn btn-primaer',
@@ -941,7 +1126,7 @@ function renderGeraeteVerwaltung() {
   el('span', { class: 'geraet-info' },
     el('div', { class: 'geraet-name' }, g.name),
     el('div', { class: 'geraet-meta' },
-      [g.gruppe, g.plan ? `Plan-Pos. ${g.plan}` : '', g.felder.join(', ')].filter(Boolean).join(' · '))),
+      [g.gruppe, g.felder.join(', ')].filter(Boolean).join(' · '))),
   el('span', { class: 'geraet-zuletzt' }, g.archiviert ? 'archiviert' : '✎'));
 
   ansicht.append(el('div', { class: 'geraet-liste' }, aktive.map(zeile)));
@@ -963,10 +1148,6 @@ function renderGeraetFormular() {
     type: 'text', maxlength: '400', placeholder: 'z. B. Sitzhöhe, Rückenlehne',
     value: geraet ? geraet.felder.join(', ') : '',
   });
-  const planFeld = el('input', {
-    type: 'number', inputmode: 'numeric', min: '1', max: '999', placeholder: 'leer = nicht im Plan',
-    value: geraet && geraet.plan ? String(geraet.plan) : '',
-  });
 
   const form = el('div', { class: 'karte' },
     el('h2', null, geraet ? `Gerät bearbeiten: ${geraet.name}` : 'Neues Gerät'),
@@ -975,7 +1156,6 @@ function renderGeraetFormular() {
     el('label', null, 'Muskelgruppe'), gruppeFeld,
     el('datalist', { id: 'gruppen-liste' }, MUSKELGRUPPEN.map((g) => el('option', { value: g }))),
     el('label', null, 'Einstellungs-Felder (kommagetrennt)'), felderFeld,
-    el('label', null, 'Position im Trainingsplan (bestimmt die Reihenfolge im Training-Tab)'), planFeld,
     el('div', { class: 'btn-reihe' },
       el('button', {
         type: 'button', class: 'btn btn-primaer',
@@ -985,16 +1165,14 @@ function renderGeraetFormular() {
           const felder = [...new Set(felderFeld.value.split(',')
             .map((f) => f.trim().slice(0, 40))
             .filter((f) => f && !RESERVIERTE_NAMEN.has(f)))].slice(0, 10);
-          const planWert = Math.round(zahlLesen(planFeld.value));
           const werte = {
             nr: nrFeld.value.trim().slice(0, 10),
             name,
             gruppe: gruppeFeld.value.trim().slice(0, 40),
             felder,
-            plan: Number.isFinite(planWert) && planWert >= 1 && planWert <= 999 ? planWert : null,
           };
           if (geraet) Object.assign(geraet, werte);
-          else daten.geraete.push({ id: neuId(), archiviert: false, plan: null, ...werte });
+          else daten.geraete.push({ id: neuId(), archiviert: false, ...werte });
           speichere();
           bearbeiteId = null;
           render();
@@ -1029,6 +1207,9 @@ function renderGeraetFormular() {
             + 'Tipp: Archivieren behält den Verlauf.')) return;
           daten.geraete = daten.geraete.filter((g) => g.id !== geraet.id);
           daten.log = daten.log.filter((e) => e.gid !== geraet.id);
+          for (const p of daten.plaene) {
+            p.geraete = p.geraete.filter((gid) => gid !== geraet.id);
+          }
           speichere();
           bearbeiteId = null;
           render();
@@ -1107,6 +1288,7 @@ function renderDaten() {
       daten = neu;
       bearbeiteId = null;
       bearbeiteSatzId = null;
+      bearbeitePlanId = null;
       suchtext = '';
       speichere();
       alert('Backup erfolgreich importiert.');
@@ -1128,9 +1310,10 @@ function renderDaten() {
         localStorage.removeItem(SPEICHER_SCHLUESSEL);
         localStorage.removeItem(`${SPEICHER_SCHLUESSEL}.defekt`);
       } catch { /* Speicher nicht schreibbar */ }
-      daten = { version: DATEN_VERSION, geraete: standardGeraete(), log: [] };
+      daten = standardDaten();
       bearbeiteId = null;
       bearbeiteSatzId = null;
+      bearbeitePlanId = null;
       suchtext = '';
       speichere();
       render();

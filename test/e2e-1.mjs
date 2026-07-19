@@ -28,8 +28,8 @@ pruefe(await seite.title() === 'Gorilla Log', 'Titel ist "Gorilla Log"');
 const anzahlGeraete = await seite.locator('.geraet-eintrag').count();
 pruefe(anzahlGeraete === 12, `Standardkatalog: 12 Geräte gerendert, inkl. Einwärmen, Laufband, Fahrrad (${anzahlGeraete})`);
 const planKarte = await seite.locator('.karte').first().textContent();
-pruefe(planKarte.includes('Trainingsplan heute: 0 von 10') && planKarte.includes('Einwärmen'),
-  'Plan-Karte zeigt Fortschritt und "Als Nächstes: Einwärmen"');
+pruefe(planKarte.includes('Ganzkörper heute: 0 von 10') && planKarte.includes('Einwärmen'),
+  'Plan-Karte zeigt "Ganzkörper 0 von 10" und "Als Nächstes: Einwärmen"');
 
 // 2) Suche
 await seite.fill('.suche', 'bein');
