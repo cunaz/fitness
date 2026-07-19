@@ -74,6 +74,17 @@ await seite.fill('.suche', '');
 await seite.waitForSelector('.geraet-eintrag');
 pruefe((await seite.locator('.geraet-eintrag').textContent()).includes('Test-Presse'), 'Importiertes Gerät in Trainingsliste');
 
+// --- B2) Fehlende Standard-Geräte in bestehenden Datenbestand ergänzen ---
+await seite.click('#tabs button[data-route="geraete"]');
+await seite.click('button:has-text("Fehlende Standard-Geräte ergänzen")');
+await seite.waitForFunction(() => document.querySelectorAll('.geraet-eintrag').length === 13);
+pruefe(true, 'Standard-Geräte ergänzt: 12 neue neben bestehender Test-Presse (13 gesamt)');
+const testPresseBleibt = await seite.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('gorillalog.v1'));
+  return d.geraete.some((g) => g.name === 'Test-Presse') && d.log.length === 1;
+});
+pruefe(testPresseBleibt, 'Bestehende Geräte und Verlauf bleiben beim Ergänzen unangetastet');
+
 // --- C) Defekter Speicher: wird gesichert, App startet frisch ---
 await seite.evaluate(() => localStorage.setItem('gorillalog.v1', '{kaputt###'));
 await seite.goto(BASIS, { waitUntil: 'networkidle' });

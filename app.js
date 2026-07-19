@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.1.2';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -819,12 +819,32 @@ function renderVerlauf() {
 
 let bearbeiteId = null; // null = kein Formular, '' = neues Gerät, sonst Geräte-ID
 
+/* Fügt Standard-Geräte hinzu, die (nach Name) noch fehlen – bestehende
+ * Geräte und der Trainingsverlauf bleiben unangetastet. So kommen neue
+ * Katalog-Geräte auch in einen bestehenden Datenbestand. */
+function ergaenzeStandardGeraete() {
+  const vorhandene = new Set(daten.geraete.map((g) => g.name.trim().toLowerCase()));
+  const neue = standardGeraete().filter((g) => !vorhandene.has(g.name.trim().toLowerCase()));
+  if (!neue.length) {
+    alert('Alle Standard-Geräte sind bereits vorhanden.');
+    return;
+  }
+  daten.geraete.push(...neue);
+  speichere();
+  render();
+  alert(`${neue.length} ${neue.length === 1 ? 'Gerät' : 'Geräte'} ergänzt: ${neue.map((g) => g.name).join(', ')}`);
+}
+
 function renderGeraeteVerwaltung() {
   ansicht.append(
     el('button', {
       type: 'button', class: 'btn btn-primaer',
       onclick: () => { bearbeiteId = ''; render(); },
     }, '+ Neues Gerät'),
+    el('button', {
+      type: 'button', class: 'btn',
+      onclick: ergaenzeStandardGeraete,
+    }, 'Fehlende Standard-Geräte ergänzen'),
     el('p', { class: 'hinweis' },
       'Nummern und Namen an dein Studio anpassen. „Einstellungs-Felder“ sind die Regler, '
       + 'die du dir merken willst (z. B. Sitzhöhe) – kommagetrennt.'),
