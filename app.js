@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const SPEICHER_SCHLUESSEL = 'gorillalog.v1';
 const MUSKELGRUPPEN = ['Brust', 'Rücken', 'Schultern', 'Arme', 'Beine', 'Rumpf', 'Ganzkörper', 'Cardio'];
 const RESERVIERTE_NAMEN = new Set(['__proto__', 'constructor', 'prototype']);
@@ -196,7 +196,7 @@ function normalisiereDaten(roh) {
     const id = typeof e.id === 'string' && e.id.length <= 64 && !logIds.has(e.id) ? e.id : neuId();
     logIds.add(id);
     const eintrag = {
-      ...unbekannteFelder(e, ['id', 'ts', 'gid', 'kg', 'wdh', 'einst', 'max', 'notiz', 'dauerMin']),
+      ...unbekannteFelder(e, ['id', 'ts', 'gid', 'kg', 'wdh', 'einst', 'max', 'notiz', 'dauerMin', 'distanzKm']),
       id, ts, gid: e.gid, kg, wdh, einst,
       max: e.max === true, // Satz „bis zur Ermüdung“
       notiz: String(e.notiz ?? '').slice(0, 500),
@@ -204,6 +204,10 @@ function normalisiereDaten(roh) {
     const dauer = Number(e.dauerMin);
     if (Number.isFinite(dauer) && dauer > 0 && dauer <= 1440) {
       eintrag.dauerMin = Math.round(dauer * 10) / 10; // Cardio: Minuten
+    }
+    const distanz = Number(e.distanzKm);
+    if (Number.isFinite(distanz) && distanz > 0 && distanz <= 1000) {
+      eintrag.distanzKm = Math.round(distanz * 100) / 100; // Cardio: Kilometer
     }
     log.push(eintrag);
   }
@@ -499,7 +503,12 @@ function istCardio(geraet) {
 }
 
 function satzText(e) {
-  if (e.dauerMin) return `${e.dauerMin} min${e.max ? ' ⚡' : ''}`;
+  if (e.dauerMin || e.distanzKm) {
+    const teile = [];
+    if (e.dauerMin) teile.push(`${e.dauerMin} min`);
+    if (e.distanzKm) teile.push(`${e.distanzKm} km`);
+    return teile.join(' · ') + (e.max ? ' ⚡' : '');
+  }
   return `${kgAnzeige(e.kg)} × ${e.wdh}${e.max ? ' ⚡' : ''}`;
 }
 
@@ -555,6 +564,11 @@ function renderGeraetAnsicht(geraet) {
     type: 'number', inputmode: 'decimal', step: '1', min: '1', max: '1440',
     value: vorlage && vorlage.dauerMin ? String(vorlage.dauerMin) : '10',
     'aria-label': 'Dauer in Minuten',
+  });
+  const distanzFeld = el('input', {
+    type: 'number', inputmode: 'decimal', step: '0.1', min: '0', max: '1000',
+    value: vorlage && vorlage.distanzKm ? String(vorlage.distanzKm) : '',
+    placeholder: 'optional', 'aria-label': 'Distanz in Kilometern',
   });
 
   const kgFeld = el('input', {
@@ -634,17 +648,26 @@ function renderGeraetAnsicht(geraet) {
       const dauer = zahlLesen(dauerFeld.value);
       if (!Number.isFinite(dauer) || dauer <= 0 || dauer > 1440) { alert('Bitte eine gültige Dauer (1–1440 Minuten) eingeben.'); return; }
       const dauerMin = Math.round(dauer * 10) / 10;
+      let distanzKm;
+      if (distanzFeld.value.trim() !== '') {
+        const distanz = zahlLesen(distanzFeld.value);
+        if (!Number.isFinite(distanz) || distanz <= 0 || distanz > 1000) { alert('Bitte eine gültige Distanz (0–1000 km) eingeben oder das Feld leer lassen.'); return; }
+        distanzKm = Math.round(distanz * 100) / 100;
+      }
       if (satzInBearbeitung) {
-        Object.assign(satzInBearbeitung, { dauerMin, einst: { ...einst }, notiz });
+        Object.assign(satzInBearbeitung, { dauerMin, distanzKm, einst: { ...einst }, notiz });
+        if (!distanzKm) delete satzInBearbeitung.distanzKm;
         speichere();
         bearbeiteSatzId = null;
         render();
         return;
       }
-      daten.log.push({
+      const eintrag = {
         id: neuId(), ts: Date.now(), gid: geraet.id,
         kg: 0, wdh: 1, dauerMin, einst: { ...einst }, max: false, notiz,
-      });
+      };
+      if (distanzKm) eintrag.distanzKm = distanzKm;
+      daten.log.push(eintrag);
       zeigeErfolg('✓ gespeichert');
       return;
     }
@@ -688,6 +711,8 @@ function renderGeraetAnsicht(geraet) {
         el('button', { type: 'button', 'aria-label': 'Dauer verringern', onclick: () => dauerStellen(-1) }, '−'),
         dauerFeld,
         el('button', { type: 'button', 'aria-label': 'Dauer erhöhen', onclick: () => dauerStellen(1) }, '+')),
+      el('label', null, 'Distanz (km)'),
+      distanzFeld,
     ] : [
       el('label', null, 'Gewicht (kg)'),
       el('div', { class: 'steller' },

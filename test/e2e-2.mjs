@@ -192,17 +192,18 @@ pruefe((await seite.locator('#view').textContent()).includes('Dauer (Minuten)'),
 pruefe((await seite.locator('.steller input').count()) === 1, 'Kein Gewicht/Sätze/Wdh-Steller bei Cardio');
 pruefe((await seite.locator('#max-satz').count()) === 0, 'Kein Max-Satz-Haken bei Cardio');
 await seite.locator('.steller input').fill('30');
+await seite.locator('.karte input[type="number"]').nth(1).fill('12.5'); // Distanz (km)
 await seite.locator('.karte input[type="text"]').first().fill('8'); // Einstellung "Stufe"
 await seite.click('.btn-primaer');
 await seite.waitForSelector('.satz-chip');
 const cardioChip = await seite.locator('.satz-chip').first().textContent();
-pruefe(cardioChip.includes('30 min'), `Cardio-Eintrag als Minuten angezeigt (${cardioChip.trim()})`);
+pruefe(cardioChip.includes('30 min · 12.5 km'), `Cardio-Eintrag mit Minuten und Distanz angezeigt (${cardioChip.trim()})`);
 const cardioDaten = await seite.evaluate(() => {
   const log = JSON.parse(localStorage.getItem('gorillalog.v1')).log;
   const e = log[log.length - 1];
-  return e.dauerMin === 30 && e.kg === 0 && e.einst.Stufe === '8';
+  return e.dauerMin === 30 && e.distanzKm === 12.5 && e.kg === 0 && e.einst.Stufe === '8';
 });
-pruefe(cardioDaten, 'Cardio-Eintrag gespeichert (dauerMin 30, Stufe 8)');
+pruefe(cardioDaten, 'Cardio-Eintrag gespeichert (dauerMin 30, distanzKm 12.5, Stufe 8)');
 
 await browser.close();
 console.log(fehler ? `\n${fehler} Prüfungen FEHLGESCHLAGEN` : '\nAlle Prüfungen bestanden ✓');
